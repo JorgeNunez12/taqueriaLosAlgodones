@@ -1,0 +1,9 @@
+# Permisos y configuracion local de Claude Code para esta maquina: no es
+# parte del proyecto, y trae rutas absolutas de este equipo especifico.
+.claude/settings.local.json
+
+# node_modules y dist ya se ignoran dentro de client/ y server/, pero un
+# .gitignore en la raiz cubre por si algun dia se agrega otra carpeta con
+# dependencias propias.
+node_modules/
+dist/

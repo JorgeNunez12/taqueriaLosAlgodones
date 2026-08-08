@@ -1,0 +1,1221 @@
+/* Diseño para tablets en un local ruidoso, con luz de sol entrando y manos
+   grasosas. De ahi las decisiones:
+     - Fondo claro y texto oscuro: con sol pegando en la pantalla, el papel
+       blanco se lee mejor que el fondo oscuro, que se vuelve espejo.
+     - Areas de toque de 60px minimo: los cocineros traen las manos con grasa y
+       no pueden apuntar; se aprieta con el canto del dedo o el nudillo.
+     - Nada de hover como unica señal: en tactil no existe hover.
+     - Sin animaciones ni adornos: esto es una herramienta de trabajo, se mira
+       de reojo y se usa con prisa. */
+
+/* Paleta tomada del logo de Tacos Los Algodones: negro carbon, fuego naranja,
+   amarillo de flama y el crema de la tortilla. El fondo se mantiene CLARO a
+   proposito, aunque el logo sea negro: la marca se lleva la barra, los titulos y
+   los acentos, no el lienzo. Una pantalla oscura bajo el sol se vuelve espejo, y
+   estas tablets trabajan con luz entrando. */
+:root {
+  --fondo: #f6f3ee;
+  --superficie: #ffffff;
+  --superficie-alta: #efe9e0;
+  --borde: #ded5c8;
+  --borde-fuerte: #b9ab98;
+  --texto: #17140f;
+  --texto-tenue: #6d6353;
+
+  /* El naranja del fuego. Se usa oscurecido (--acento) para texto y bordes
+     porque el naranja puro del logo sobre blanco no alcanza contraste AA. */
+  --marca: #e8491f;
+  --acento: #c23a12;
+  --acento-suave: #fdeee7;
+  --carbon: #17140f;
+  --flama: #f5a300;
+
+  --verde: #1f7a45;
+  --verde-suave: #e6f2ea;
+  --ambar: #8a6100;
+  --ambar-suave: #fbf1dc;
+  --rojo: #a32a1f;
+  --rojo-suave: #fbe9e7;
+  --toque: 60px;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#raiz {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 17px;
+  line-height: 1.4;
+  /* La app maneja su propio scroll por panel; el body nunca se mueve, para que
+     no rebote la barra superior al arrastrar una lista. */
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* --- Cascaron --- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Negro carbon como el logo: ancla la marca en cada pantalla sin robarle
+   contraste al contenido, que sigue sobre fondo claro. */
+.barra {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  background: var(--carbon);
+  color: #fff;
+  border-bottom: 3px solid var(--marca);
+  flex-shrink: 0;
+}
+
+.barra h1 {
+  font-size: 18px;
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.barra .logo-barra {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.barra .relleno {
+  flex: 1;
+}
+
+/* Quien tiene la sesion abierta en esta tablet. Va en la barra para que se vea
+   siempre: si alguien deja la sesion de otro abierta, se nota de inmediato. */
+.barra .sesion {
+  font-size: 14px;
+  color: rgb(255 255 255 / 0.72);
+  white-space: nowrap;
+}
+
+.barra .sesion strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Sobre el carbon, los controles de la barra van en claro. */
+.barra .boton {
+  background: rgb(255 255 255 / 0.1);
+  border-color: rgb(255 255 255 / 0.28);
+  color: #fff;
+}
+
+.barra .boton:active {
+  background: rgb(255 255 255 / 0.2);
+}
+
+.barra .estado-red {
+  color: rgb(255 255 255 / 0.72);
+}
+
+.contenido {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+/* --- Señales de conexion --- */
+
+.estado-red {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  color: var(--texto-tenue);
+  white-space: nowrap;
+}
+
+.punto {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--verde);
+  flex-shrink: 0;
+}
+
+.punto.caido {
+  background: var(--rojo);
+}
+
+/* Franja ancha: si la tablet perdio conexion, la mesera tiene que enterarse sin
+   buscarlo. Un iconito en la esquina no basta. */
+.franja-offline {
+  background: var(--rojo);
+  color: #fff;
+  padding: 9px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.franja-offline small {
+  display: block;
+  font-weight: 400;
+  opacity: 0.92;
+  font-size: 13px;
+}
+
+/* --- Botones --- */
+
+.boton {
+  min-height: var(--toque);
+  padding: 0 20px;
+  border-radius: 6px;
+  background: var(--superficie);
+  border: 1px solid var(--borde-fuerte);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.boton:active {
+  background: var(--superficie-alta);
+}
+
+.boton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.boton.primario {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #fff;
+}
+
+.boton.primario:active {
+  background: #9c2f0e;
+}
+
+.boton.verde {
+  background: var(--verde);
+  border-color: var(--verde);
+  color: #fff;
+}
+
+.boton.verde:active {
+  background: #175c34;
+}
+
+.boton.ancho {
+  width: 100%;
+}
+
+.boton.chico {
+  min-height: 46px;
+  padding: 0 16px;
+  font-size: 15px;
+}
+
+/* --- Rejillas y tarjetas --- */
+
+.rejilla {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+.tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.vacio {
+  text-align: center;
+  color: var(--texto-tenue);
+  padding: 48px 16px;
+  font-size: 16px;
+}
+
+/* --- Mesas --- */
+
+/* Solo son 4: caben grandes en cualquier tablet y se aciertan sin apuntar. */
+.rejilla-mesas {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, 1fr);
+  max-width: 720px;
+}
+
+.mesa {
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.mesa .numero {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.mesa.ocupada {
+  border-color: var(--acento);
+  border-width: 2px;
+  padding: 15px;
+}
+
+.mesa .cuentas {
+  font-size: 14px;
+  color: var(--texto-tenue);
+}
+
+/* Las cuentas de una mesa ocupada, listadas dentro de la tarjeta: se ve de un
+   vistazo cuantas familias hay y cuanto debe cada una, sin abrir nada. */
+.mesa .lista-cuentas {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 14px;
+}
+
+.mesa .lista-cuentas div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Menu y carrito --- */
+
+.categoria {
+  margin: 22px 0 10px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texto-tenue);
+  font-weight: 700;
+}
+
+.platillo {
+  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.platillo:active {
+  border-color: var(--acento);
+  background: var(--acento-suave);
+}
+
+.platillo .nombre {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.platillo .precio {
+  color: var(--texto-tenue);
+  font-weight: 600;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.linea {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.linea:last-child {
+  border-bottom: none;
+}
+
+.linea .info {
+  flex: 1;
+  min-width: 0;
+}
+
+.linea .titulo {
+  font-weight: 600;
+}
+
+.linea .notas {
+  font-size: 14px;
+  color: var(--ambar);
+  margin-top: 2px;
+}
+
+.linea .monto {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.contador {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.contador button {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  background: var(--superficie);
+  border: 1px solid var(--borde-fuerte);
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.contador button:active {
+  background: var(--superficie-alta);
+}
+
+.contador .cantidad {
+  min-width: 34px;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Barra fija del total: siempre visible aunque el menu sea largo. */
+.pie {
+  flex-shrink: 0;
+  background: var(--superficie);
+  border-top: 1px solid var(--borde);
+  padding: 12px 16px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.pie .total {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pie .etiqueta-total {
+  font-size: 13px;
+  color: var(--texto-tenue);
+}
+
+/* --- Estados de platillo --- */
+
+.insignia {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.insignia.recibido {
+  background: var(--superficie-alta);
+  color: var(--texto-tenue);
+  border-color: var(--borde);
+}
+
+.insignia.preparando {
+  background: var(--ambar-suave);
+  color: var(--ambar);
+  border-color: #e3cc95;
+}
+
+.insignia.listo {
+  background: var(--verde-suave);
+  color: var(--verde);
+  border-color: #a9cfba;
+}
+
+.insignia.entregado {
+  background: transparent;
+  color: var(--texto-tenue);
+  border-color: var(--borde);
+}
+
+.insignia.cancelado {
+  background: var(--rojo-suave);
+  color: var(--rojo);
+  border-color: #e0b3ad;
+  text-decoration: line-through;
+}
+
+/* --- Cocina --- */
+
+.rejilla-cocina {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-items: start;
+}
+
+.comanda-cocina {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* El color del encabezado es el reloj: entre mas lleva esperando, mas urgente
+   se ve. En una cocina nadie tiene tiempo de leer marcas de tiempo. */
+.comanda-cocina.espera-media {
+  border-color: #d3b463;
+}
+
+.comanda-cocina.espera-larga {
+  border-color: var(--rojo);
+  border-width: 2px;
+}
+
+.comanda-cocina .cabeza {
+  padding: 12px 14px;
+  background: var(--superficie-alta);
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.comanda-cocina.espera-media .cabeza {
+  background: var(--ambar-suave);
+}
+
+.comanda-cocina.espera-larga .cabeza {
+  background: var(--rojo-suave);
+}
+
+.comanda-cocina .mesa-num {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.comanda-cocina .minutos {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.comanda-cocina.espera-larga .minutos {
+  color: var(--rojo);
+}
+
+.item-cocina {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--borde);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.item-cocina:last-child {
+  border-bottom: none;
+}
+
+.item-cocina .cant {
+  font-size: 22px;
+  font-weight: 700;
+  min-width: 40px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Avisos --- */
+
+.avisos {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(460px, calc(100% - 32px));
+}
+
+.aviso {
+  background: var(--verde);
+  color: #fff;
+  padding: 14px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+}
+
+.aviso.error {
+  background: var(--rojo);
+}
+
+.aviso .cerrar {
+  margin-left: auto;
+  font-size: 22px;
+  line-height: 1;
+  padding: 0 6px;
+  color: #fff;
+}
+
+/* --- Pantallas de arranque: rol e inicio de sesion --- */
+
+.pantalla-inicio {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.pantalla-inicio h1 {
+  font-size: 26px;
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.pantalla-inicio p {
+  color: var(--texto-tenue);
+  margin: 0 0 24px;
+}
+
+.pantalla-inicio .opciones {
+  display: grid;
+  gap: 12px;
+  width: min(360px, 100%);
+}
+
+.pantalla-inicio .opciones .boton {
+  min-height: 76px;
+  font-size: 18px;
+}
+
+/* Los nombres del personal, en botones grandes: se toca el propio y listo. Es
+   registro de quien atiende, no una contraseña, asi que no se pide nada mas. */
+.rejilla-meseros {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  width: min(520px, 100%);
+}
+
+.rejilla-meseros .boton {
+  min-height: 84px;
+  font-size: 19px;
+}
+
+/* --- Formularios --- */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.campo label {
+  font-size: 14px;
+  color: var(--texto-tenue);
+  font-weight: 600;
+}
+
+.campo input,
+.campo select,
+.campo textarea {
+  min-height: var(--toque);
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: var(--superficie);
+  border: 1px solid var(--borde-fuerte);
+  color: var(--texto);
+  font: inherit;
+  width: 100%;
+}
+
+.campo input:focus,
+.campo textarea:focus {
+  outline: 2px solid var(--acento);
+  outline-offset: -1px;
+}
+
+.campo textarea {
+  min-height: 84px;
+  resize: none;
+}
+
+.error-texto {
+  color: var(--rojo);
+  background: var(--rojo-suave);
+  border: 1px solid #e0b3ad;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+
+/* --- Modal --- */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  background: rgb(28 28 26 / 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 40;
+  padding: 16px;
+}
+
+.modal {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 20px;
+  width: min(520px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+  margin-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.2);
+}
+
+.modal h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.modal .acciones {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.modal .acciones .boton {
+  flex: 1;
+}
+
+/* --- Cobro --- */
+
+/* El monto grande: es lo que la caja le dice al cliente en voz alta. */
+.monto-grande {
+  font-size: 40px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  margin: 4px 0 6px;
+}
+
+.resumen-saldo {
+  text-align: center;
+  color: var(--texto-tenue);
+  font-size: 15px;
+  margin: 0 0 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Elegir como se reparte el cobro. Pestañas anchas, no un desplegable: se ve
+   cual esta activa sin abrir nada. */
+.pestanas {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.pestanas .boton {
+  flex: 1;
+  min-height: 52px;
+  font-size: 15px;
+  padding: 0 8px;
+}
+
+.pestanas .boton.activa {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #fff;
+}
+
+/* Cada platillo que se puede marcar para cobrar. La fila entera es el area de
+   toque: apuntarle a una casilla chica con las manos sucias no funciona. */
+.fila-cobro {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--toque);
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--superficie);
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.fila-cobro.marcada {
+  border-color: var(--acento);
+  border-width: 2px;
+  padding: 9px 11px;
+  background: var(--acento-suave);
+}
+
+.fila-cobro.pagada {
+  opacity: 0.5;
+  background: var(--superficie-alta);
+}
+
+.fila-cobro .marca {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 2px solid var(--borde-fuerte);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.fila-cobro.marcada .marca {
+  background: var(--acento);
+  border-color: var(--acento);
+}
+
+.fila-cobro .info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fila-cobro .monto {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Repartir en partes iguales: el numero de personas se elige tocando, no
+   escribiendo, porque escribir en tablet con prisa es lento y se equivoca. */
+.partes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.partes .boton {
+  min-width: 60px;
+  min-height: 56px;
+  flex: 1;
+  padding: 0 10px;
+}
+
+.partes .boton.activa {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #fff;
+}
+
+/* Historial de lo ya cobrado en esta cuenta, para que la caja sepa por donde
+   va cuando el cliente pregunta "¿cuanto llevamos?". */
+.pagos-previos {
+  border-top: 1px solid var(--borde);
+  margin-top: 16px;
+  padding-top: 12px;
+  font-size: 14px;
+}
+
+.pagos-previos .renglon {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+  color: var(--texto-tenue);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 620px) {
+  .velo {
+    align-items: center;
+  }
+}
+
+/* --- Marca --- */
+
+.logo-inicio {
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 18px;
+}
+
+.logo-inicio.chico {
+  width: 120px;
+  height: 120px;
+  margin-bottom: 12px;
+}
+
+/* Los botones de rol dicen tambien para que sirve cada uno: la tablet se
+   configura una sola vez, casi siempre por alguien que no la va a usar, y
+   "Caja" a secas no basta para saber cual toca. */
+.opcion-rol {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 14px 20px;
+  text-align: left;
+}
+
+.opcion-rol .nombre-rol {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.opcion-rol .descripcion-rol {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--texto-tenue);
+}
+
+/* --- Navegacion principal (tablet del encargado) --- */
+
+.pestanas-principales {
+  display: flex;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borde);
+  flex-shrink: 0;
+}
+
+.pestanas-principales button {
+  flex: 1;
+  min-height: 54px;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--texto-tenue);
+  border-bottom: 3px solid transparent;
+}
+
+.pestanas-principales button.activa {
+  color: var(--acento);
+  border-bottom-color: var(--marca);
+}
+
+/* --- Reportes --- */
+
+.barra-reportes {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+/* Los numeros del corte. El principal (lo cobrado) va al doble de tamaño: es
+   el unico que se lee a distancia y el que se anota al cerrar la caja. */
+.tiras {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.tira {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tira .etiqueta {
+  font-size: 13px;
+  color: var(--texto-tenue);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tira .valor {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.tira .nota {
+  font-size: 13px;
+  color: var(--texto-tenue);
+}
+
+.tira.principal {
+  background: var(--carbon);
+  border-color: var(--carbon);
+  color: #fff;
+  grid-column: span 2;
+}
+
+.tira.principal .etiqueta {
+  color: var(--flama);
+}
+
+.tira.principal .valor {
+  font-size: 44px;
+}
+
+.tira.principal .nota {
+  color: rgb(255 255 255 / 0.7);
+}
+
+.tira.alerta .valor {
+  color: var(--acento);
+}
+
+.seccion-reporte {
+  margin-top: 22px;
+}
+
+.seccion-reporte h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--texto-tenue);
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.sin-datos {
+  color: var(--texto-tenue);
+  padding: 14px 0;
+  margin: 0;
+}
+
+/* Renglon de reporte con barra de proporcion detras. La barra no es adorno:
+   deja ver cual metodo o platillo domina sin leer numero por numero. */
+.renglon-reporte {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.renglon-reporte .barra-proporcion {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--acento-suave);
+  pointer-events: none;
+}
+
+.renglon-reporte .info {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Sin `capitalize`: los nombres vienen del menu tal como los escribio el
+   encargado, y forzarlos convertia "Taco de pastor" en "Taco De Pastor". La
+   unica que si necesita ayuda es la categoria, que se guarda en minusculas. */
+.renglon-reporte .nombre {
+  font-weight: 600;
+}
+
+.renglon-reporte .nombre.categoria-nombre::first-letter,
+.seccion-reporte h2::first-letter {
+  text-transform: uppercase;
+}
+
+.renglon-reporte .detalle {
+  font-size: 13px;
+  color: var(--texto-tenue);
+}
+
+.renglon-reporte .monto {
+  position: relative;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Ventas por hora: barras verticales. Con 8-14 horas de servicio caben todas
+   sin scroll y se ve de un golpe cuando pega la carga. */
+.horas {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+/* Ancho fijo, sin `flex: 1`. Con una sola hora de servicio, dejar que la
+   columna creciera pintaba un bloque rojo de lado a lado que no comunicaba
+   nada: una barra sola tiene que verse como una barra, no como un banner. */
+.hora {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 62px;
+  flex: 0 0 auto;
+}
+
+.hora .columna {
+  height: 96px;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  background: var(--superficie-alta);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.hora .relleno-columna {
+  width: 100%;
+  background: var(--marca);
+  border-radius: 5px 5px 0 0;
+}
+
+.hora .etiqueta-hora {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hora .monto-hora {
+  font-size: 11px;
+  color: var(--texto-tenue);
+  font-variant-numeric: tabular-nums;
+}
+
+.pie-nota {
+  font-size: 13px;
+  color: var(--texto-tenue);
+  margin: 10px 0 0;
+}
+
+/* --- Administracion del menu --- */
+
+.fila-menu {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+
+/* Un platillo agotado tiene que verse agotado de reojo, no solo decirlo en el
+   boton: es lo que evita que alguien lo siga cantando a la cocina. */
+.fila-menu.agotado {
+  background: var(--superficie-alta);
+  border-color: var(--borde-fuerte);
+}
+
+.fila-menu.agotado .nombre {
+  text-decoration: line-through;
+  color: var(--texto-tenue);
+}
+
+.fila-menu .info-menu {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: var(--toque);
+  justify-content: center;
+}
+
+.fila-menu .info-menu .nombre {
+  font-weight: 600;
+}
+
+.fila-menu .info-menu .detalle {
+  font-size: 13px;
+  color: var(--texto-tenue);
+}
+
+.fila-menu .monto {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.boton.rojo {
+  background: var(--rojo);
+  border-color: var(--rojo);
+  color: #fff;
+}
+
+.boton.rojo:active {
+  background: #8a231a;
+}

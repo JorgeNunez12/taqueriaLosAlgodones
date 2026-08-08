@@ -1,0 +1,13 @@
+node_modules/
+
+# La base se sube por ahora: solo tiene datos de prueba, y asi el proyecto
+# clona listo para usarse sin correr `npm run seed`. En cuanto el negocio
+# empiece a operar de verdad, hay que sacar taqueria.db de git (git rm
+# --cached) y agregar estas lineas de vuelta, para no subir ventas reales
+# ni arriesgar que un `git pull` pise el historial de un dia con el de otro:
+#   datos/
+#   *.db
+# Los archivos de journal de SQLite si se ignoran siempre: no son datos, son
+# estado transitorio de la conexion activa.
+*.db-wal
+*.db-shm
