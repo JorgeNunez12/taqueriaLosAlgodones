@@ -58,6 +58,12 @@ export function crearServicio(db) {
               cerrado_en = datetime('now', 'localtime')
         WHERE id = ?`
     ),
+    cancelarComanda: db.prepare(
+      `UPDATE comandas
+          SET estado = 'cancelada',
+              cerrado_en = datetime('now', 'localtime')
+        WHERE id = ?`
+    ),
 
     itemsDeComanda: db.prepare(
       'SELECT * FROM comanda_items WHERE comanda_id = ? ORDER BY id'
@@ -465,6 +471,48 @@ export function crearServicio(db) {
     return { comanda, yaEstabaCerrada: false };
   });
 
+  /**
+   * Cancela una cuenta a la que nunca se le pidio nada: se abrio la mesa y el
+   * cliente se fue antes de ordenar. Sin esto quedaba atrapada para siempre,
+   * porque cerrar una comanda solo ocurre como consecuencia de un pago y un
+   * pago exige que haya algo que cobrar.
+   *
+   * Se cancela, no se cobra en cero: un cobro de $0 ensuciaria el corte del dia
+   * con un ticket que nunca existio.
+   *
+   * Solo aplica a cuentas realmente vacias. Con platillos de por medio la
+   * decision es de quien atiende (cancelar plato por plato), y con dinero ya
+   * cobrado cancelar dejaria el pago sin cuenta a la cual pertenecer.
+   */
+  const cancelarComandaVacia = db.transaction((comandaId) => {
+    const comanda = q.comandaPorId.get(comandaId);
+    if (!comanda) throw noEncontrado('la comanda', comandaId);
+    if (comanda.estado !== 'abierta') {
+      // Reintento de la tablet tras perder la respuesta: ya estaba cancelada.
+      return { comanda: armarComanda(comanda), yaEstabaCerrada: true };
+    }
+
+    const items = q.itemsDeComanda.all(comandaId);
+    if (items.length > 0) {
+      throw new ErrorApi(
+        409,
+        'comanda_con_platillos',
+        'Esta cuenta ya tiene platillos; cancelalos primero o cobrala'
+      );
+    }
+    if (q.sumaPagada.get(comandaId).total > 0) {
+      throw new ErrorApi(
+        409,
+        'comanda_con_pagos',
+        'Esta cuenta ya tiene pagos registrados; no se puede cancelar'
+      );
+    }
+
+    q.cancelarComanda.run(comandaId);
+    sincronizarEstadoMesa(comanda.mesa_id);
+    return { comanda: obtenerComanda(comandaId), yaEstabaCerrada: false };
+  });
+
   /** Vista de cocina: lo que falta cocinar, agrupado por mesa y comanda. */
   function pendientesCocina() {
     const porComanda = new Map();
@@ -498,6 +546,7 @@ export function crearServicio(db) {
     cambiarEstadoItem,
     registrarPago,
     cerrarComanda,
+    cancelarComandaVacia,
     pendientesCocina,
   };
 }

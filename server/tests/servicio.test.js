@@ -214,6 +214,63 @@ test('no se cobra una comanda vacia', () => {
   );
 });
 
+test('una cuenta sin platillos se cancela y libera la mesa', () => {
+  const { servicio } = escenario();
+  const { comanda } = servicio.crearComanda({ mesa_id: 1 });
+  assert.equal(servicio.listarMesas().find((m) => m.id === 1).estado, 'ocupada');
+
+  const { comanda: cancelada } = servicio.cancelarComandaVacia(comanda.id);
+
+  assert.equal(cancelada.estado, 'cancelada');
+  // Deja de estar entre las abiertas, que es lo que miran caja y meseras.
+  assert.ok(!servicio.listarComandas().some((c) => c.id === comanda.id));
+  assert.equal(servicio.listarMesas().find((m) => m.id === 1).estado, 'libre');
+});
+
+test('cancelar una cuenta vacia no mueve el corte del dia', () => {
+  const { servicio } = escenario();
+  const { comanda } = servicio.crearComanda({ mesa_id: 1 });
+  servicio.cancelarComandaVacia(comanda.id);
+
+  // Una cuenta que nunca existio no puede aparecer como venta ni como cobro.
+  assert.equal(servicio.db.prepare('SELECT COUNT(*) AS n FROM pagos').get().n, 0);
+  assert.equal(servicio.obtenerComanda(comanda.id).total_centavos, 0);
+});
+
+test('cancelar dos veces la misma cuenta vacia no es error', () => {
+  const { servicio } = escenario();
+  const { comanda } = servicio.crearComanda({ mesa_id: 1 });
+
+  servicio.cancelarComandaVacia(comanda.id);
+  // Reintento de la tablet tras perder la respuesta: tiene que ser inofensivo.
+  const segunda = servicio.cancelarComandaVacia(comanda.id);
+
+  assert.equal(segunda.yaEstabaCerrada, true);
+  assert.equal(segunda.comanda.estado, 'cancelada');
+});
+
+test('no se cancela una cuenta que ya tiene platillos', () => {
+  const { servicio, pastor } = escenario();
+  const { comanda } = servicio.crearComanda({ mesa_id: 1 });
+  servicio.agregarItems(comanda.id, [{ platillo_id: pastor, cantidad: 1 }]);
+
+  assert.throws(
+    () => servicio.cancelarComandaVacia(comanda.id),
+    (err) => err.codigo === 'comanda_con_platillos'
+  );
+  // Sigue abierta: cancelarla habria borrado un pedido que ya salio a cocina.
+  assert.equal(servicio.obtenerComanda(comanda.id).estado, 'abierta');
+});
+
+test('no se cancela una cuenta cobrada, ni siquiera si quedo sin platillos', () => {
+  const { servicio, pastor } = escenario();
+  const { comanda } = servicio.crearComanda({ mesa_id: 1 });
+  servicio.agregarItems(comanda.id, [{ platillo_id: pastor, cantidad: 1 }]);
+  servicio.cerrarComanda(comanda.id);
+
+  assert.equal(servicio.cancelarComandaVacia(comanda.id).comanda.estado, 'cerrada');
+});
+
 test('la vista de cocina agrupa por comanda y omite lo ya entregado', () => {
   const { servicio, pastor, refresco } = escenario();
 

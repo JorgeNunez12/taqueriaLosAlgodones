@@ -134,6 +134,20 @@ export function crearApp({ db = abrirDb() } = {}) {
     })
   );
 
+  // Cuenta que se abrio y nunca se uso. Va aparte de /cerrar porque no entra
+  // dinero: no es un cobro de cero, es una cuenta que no existio.
+  app.post(
+    '/api/comandas/:id/cancelar',
+    ruta((req, res) => {
+      const { comanda } = servicio.cancelarComandaVacia(Number(req.params.id));
+      // Mismo evento que al cobrar: para las tablets el efecto es identico,
+      // la cuenta deja de estar abierta y hay que quitarla de la pantalla.
+      io.emit('comanda:cerrada', comanda);
+      io.emit('mesas:actualizadas', servicio.listarMesas());
+      res.json(comanda);
+    })
+  );
+
   // Cobro parcial: platillos sueltos o una parte de la division. Si con este
   // pago se salda la cuenta, el servicio ya la cerro y aqui solo se avisa.
   app.post(

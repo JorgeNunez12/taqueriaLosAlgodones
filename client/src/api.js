@@ -65,6 +65,7 @@ export const api = {
     pedir(`/comandas/${comandaId}/items`, { metodo: 'POST', cuerpo: { items } }),
   cerrarComanda: (comandaId, metodo_pago, client_id) =>
     pedir(`/comandas/${comandaId}/cerrar`, { metodo: 'POST', cuerpo: { metodo_pago, client_id } }),
+  cancelarComanda: (comandaId) => pedir(`/comandas/${comandaId}/cancelar`, { metodo: 'POST' }),
   registrarPago: (comandaId, cuerpo) =>
     pedir(`/comandas/${comandaId}/pagos`, { metodo: 'POST', cuerpo }),
   cambiarEstadoItem: (itemId, estado) =>
@@ -102,6 +103,10 @@ export function ejecutarEnvio(envio) {
       return api.agregarItems(envio.comanda_id, envio.cuerpo.items);
     case 'cerrar':
       return api.cerrarComanda(envio.comanda_id, envio.cuerpo.metodo_pago, envio.client_id);
+    // Cancelar no lleva client_id: el servidor ya es idempotente por estado,
+    // una cuenta que no esta abierta se devuelve tal cual en vez de fallar.
+    case 'cancelar':
+      return api.cancelarComanda(envio.comanda_id);
     case 'pago':
       return api.registrarPago(envio.comanda_id, { ...envio.cuerpo, client_id: envio.client_id });
     case 'estado':

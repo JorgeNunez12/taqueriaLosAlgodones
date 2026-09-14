@@ -75,16 +75,28 @@ export function usarTaqueria(rol) {
   }, [refrescarPendientes]);
 
   /**
-   * Mete o reemplaza una comanda en la lista.
+   * Mete o reemplaza una comanda en la lista. Si ya no esta abierta (se cobro
+   * o se cancelo), se QUITA en vez de guardarse.
    *
    * Se usa desde los eventos de socket Y desde la respuesta del POST. Esto
    * ultimo importa: al abrir una cuenta, la pantalla salta de inmediato a
    * capturar, y si esperara al evento `comanda:nueva` para conocerla, ese
    * primer render la buscaria en una lista donde todavia no esta. El POST ya
    * devuelve la comanda completa, asi que no hay razon para esperar.
+   *
+   * El caso que esto arregla: la caja cobra una cuenta y `enviar()` aplica de
+   * inmediato la respuesta del POST (`resultado.comanda`), que ya viene con
+   * `estado: 'cerrada'`. Sin este filtro esa comanda se quedaba en la lista
+   * local de ESA tablet hasta que llegara el evento `mesas:actualizadas`, y en
+   * ese hueco la mesa la seguia mostrando (a veces en $0, porque el total ya
+   * se habia recalculado contra el saldo pagado).
    */
   const guardarComanda = useCallback((comanda) => {
     if (!comanda?.id) return;
+    if (comanda.estado !== 'abierta') {
+      setComandas((previas) => previas.filter((c) => c.id !== comanda.id));
+      return;
+    }
     setComandas((previas) =>
       previas.some((c) => c.id === comanda.id)
         ? previas.map((c) => (c.id === comanda.id ? comanda : c))

@@ -22,6 +22,7 @@ const METODOS = [
 
 export function Caja({ comandas, enviar }) {
   const [cobrando, setCobrando] = useState(null);
+  const [cancelando, setCancelando] = useState(null);
 
   if (comandas.length === 0) {
     return <div className="vacio">No hay cuentas abiertas.</div>;
@@ -36,12 +37,17 @@ export function Caja({ comandas, enviar }) {
   // al abrir el modal: si llega otro platillo mientras la caja cobra, el saldo
   // que se ve tiene que ser el nuevo.
   const enCobro = cobrando ? comandas.find((c) => c.id === cobrando) : null;
+  const enCancelacion = cancelando ? comandas.find((c) => c.id === cancelando) : null;
 
   return (
     <>
       <div className="rejilla-cocina">
         {ordenadas.map((comanda) => {
           const parcial = comanda.pagado_centavos > 0;
+          // Cuenta abierta a la que nunca se le pidio nada: no hay que cobrar,
+          // hay que soltar la mesa. Ofrecerle "Cobrar $0.00" no lleva a ningun
+          // lado, porque el servidor rechaza cobrar una cuenta sin platillos.
+          const vacia = comanda.items.length === 0 && comanda.pagado_centavos === 0;
           return (
             <div key={comanda.id} className="comanda-cocina">
               <div className="cabeza">
@@ -81,11 +87,28 @@ export function Caja({ comandas, enviar }) {
                     Ya pagaron {comanda.pagado_formateado} de {comanda.total_formateado}
                   </p>
                 )}
-                <button className="boton primario ancho" onClick={() => setCobrando(comanda.id)}>
-                  {parcial
-                    ? `Cobrar resto ${comanda.saldo_formateado}`
-                    : `Cobrar ${comanda.total_formateado}`}
-                </button>
+                {vacia ? (
+                  <>
+                    <p
+                      style={{
+                        margin: '0 0 10px',
+                        fontSize: 14,
+                        color: 'var(--texto-tenue)',
+                      }}
+                    >
+                      No se pidió nada en esta cuenta.
+                    </p>
+                    <button className="boton ancho" onClick={() => setCancelando(comanda.id)}>
+                      Cancelar cuenta y liberar mesa
+                    </button>
+                  </>
+                ) : (
+                  <button className="boton primario ancho" onClick={() => setCobrando(comanda.id)}>
+                    {parcial
+                      ? `Cobrar resto ${comanda.saldo_formateado}`
+                      : `Cobrar ${comanda.total_formateado}`}
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -95,7 +118,69 @@ export function Caja({ comandas, enviar }) {
       {enCobro && (
         <Cobro comanda={enCobro} enviar={enviar} alCerrar={() => setCobrando(null)} />
       )}
+
+      {enCancelacion && (
+        <CancelarVacia
+          comanda={enCancelacion}
+          enviar={enviar}
+          alCerrar={() => setCancelando(null)}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * Confirmacion para soltar una cuenta que nunca se uso. Se pregunta porque el
+ * paso no tiene vuelta atras, y el boton vive junto a los de cobro: un toque
+ * de mas en la mesa equivocada no deberia cerrar nada solo.
+ */
+function CancelarVacia({ comanda, enviar, alCerrar }) {
+  const [mandando, setMandando] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function cancelar() {
+    setMandando(true);
+    setError(null);
+    try {
+      const respuesta = await enviar({ tipo: 'cancelar', comanda_id: comanda.id, cuerpo: {} });
+      if (!respuesta.ok) {
+        setError(respuesta.error.message);
+        return;
+      }
+      alCerrar();
+    } catch (err) {
+      setError(`No se pudo cancelar: ${err.message}`);
+    } finally {
+      setMandando(false);
+    }
+  }
+
+  const titulo = `Mesa ${comanda.mesa_numero}${comanda.etiqueta ? ` · ${comanda.etiqueta}` : ''}`;
+
+  return (
+    <Modal titulo={titulo} alCerrar={alCerrar}>
+      <p style={{ margin: '0 0 6px' }}>
+        Esta cuenta se abrió pero nunca se le pidió nada.
+      </p>
+      <p style={{ color: 'var(--texto-tenue)', margin: '0 0 4px' }}>
+        Se va a cancelar y la mesa queda libre. No entra dinero ni aparece en el corte del día.
+      </p>
+      {error && <p className="error-texto" style={{ marginTop: 14 }}>{error}</p>}
+      <div className="acciones">
+        <button className="boton" onClick={alCerrar}>
+          Dejarla abierta
+        </button>
+        <button
+          className="boton primario"
+          onClick={cancelar}
+          disabled={mandando}
+          style={{ flex: 1.4 }}
+        >
+          {mandando ? 'Cancelando…' : 'Cancelar cuenta'}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
