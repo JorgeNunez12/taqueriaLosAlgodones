@@ -34,8 +34,21 @@ export function crearApp({ db = abrirDb() } = {}) {
   // Cada pantalla se anuncia y entra a su cuarto, para poder mandar avisos
   // dirigidos (ej. "pedido listo" solo a las tablets de meseras).
   io.on('connection', (socket) => {
-    socket.on('registrar', ({ rol } = {}) => {
+    socket.on('registrar', ({ rol, mesero_id } = {}) => {
       if (['mesera', 'cocina', 'caja', 'admin'].includes(rol)) socket.join(rol);
+      // Ademas del cuarto del rol, la tablet de un mesero entra al suyo propio.
+      // Asi los avisos de sus cuentas suenan solo en su tablet: si sonaran en
+      // las cuatro, en hora pico serian un ruido constante que nadie distingue
+      // del suyo, y el aviso deja de servir.
+      if (rol === 'mesera' && mesero_id != null) {
+        // Al cambiar de turno el socket es el mismo pero el mesero no: hay que
+        // salir del cuarto anterior o la tablet seguiria recibiendo los avisos
+        // de quien acaba de irse.
+        for (const cuarto of socket.rooms) {
+          if (typeof cuarto === 'string' && cuarto.startsWith('mesero:')) socket.leave(cuarto);
+        }
+        socket.join(`mesero:${mesero_id}`);
+      }
     });
     // Al conectar (o reconectar) la pantalla pide el estado completo.
     socket.on('sincronizar', (_, ack) => {
@@ -111,6 +124,15 @@ export function crearApp({ db = abrirDb() } = {}) {
       if (agregados.length > 0) {
         io.emit('comanda:actualizada', comanda);
         io.to('cocina').emit('cocina:pendientes', servicio.pendientesCocina());
+        // Va aparte de `cocina:pendientes` porque ese evento tambien viaja
+        // cuando cocina misma mueve un platillo: sonar con el seria sonarle al
+        // cocinero por su propio toque. Este solo sale cuando entro algo nuevo,
+        // y `agregados` ya excluye los reenvios de una tablet que reconecto.
+        io.to('cocina').emit('aviso:pedido-nuevo', {
+          mesa_numero: comanda.mesa_numero,
+          etiqueta: comanda.etiqueta,
+          cuantos: agregados.reduce((suma, i) => suma + i.cantidad, 0),
+        });
       }
       res.status(201).json({
         comanda,
@@ -180,12 +202,22 @@ export function crearApp({ db = abrirDb() } = {}) {
       io.emit('item:estado', { item, comanda_id: comanda.id, mesa_id: comanda.mesa_id });
       io.emit('comanda:actualizada', comanda);
       io.to('cocina').emit('cocina:pendientes', servicio.pendientesCocina());
-      if (item.estado === 'listo') {
-        io.to('mesera').emit('aviso:platillo-listo', {
-          item,
-          mesa_numero: comanda.mesa_numero,
-          etiqueta: comanda.etiqueta,
-        });
+
+      // Avisos a la mesera dueña de la cuenta. Se mandan a su cuarto y no a
+      // todas: en hora pico, cuatro tablets sonando por cada plato de cualquier
+      // mesa vuelven el aviso ruido de fondo. Si la cuenta se abrio sin mesero
+      // (no deberia, pero el campo lo permite) se cae a todas las meseras, que
+      // es preferible a que nadie se entere.
+      const destino = comanda.mesero_id != null ? `mesero:${comanda.mesero_id}` : 'mesera';
+      if (item.estado === 'listo' || item.estado === 'preparando') {
+        io.to(destino).emit(
+          item.estado === 'listo' ? 'aviso:platillo-listo' : 'aviso:platillo-preparando',
+          {
+            item,
+            mesa_numero: comanda.mesa_numero,
+            etiqueta: comanda.etiqueta,
+          }
+        );
       }
       res.json({ item, comanda });
     })

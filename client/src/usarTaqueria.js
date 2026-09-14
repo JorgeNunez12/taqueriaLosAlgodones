@@ -14,9 +14,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ErrorApi, ErrorDeRed, ejecutarEnvio } from './api.js';
 import { obtenerSocket, sincronizar } from './socket.js';
+import { sonar } from './sonido.js';
 import * as cola from './cola.js';
 
-export function usarTaqueria(rol) {
+export function usarTaqueria(rol, meseroId = null) {
   const [conectado, setConectado] = useState(false);
   const [sincronizado, setSincronizado] = useState(false);
   const [mesas, setMesas] = useState([]);
@@ -124,7 +125,7 @@ export function usarTaqueria(rol) {
 
     const alConectar = async () => {
       setConectado(true);
-      socket.emit('registrar', { rol });
+      socket.emit('registrar', { rol, mesero_id: meseroId });
       // Sincronizar primero, drenar despues: si la cola trae "cerrar comanda 7"
       // queremos partir de un estado real, no de uno de hace media hora.
       const ok = await recargar(socket);
@@ -156,15 +157,44 @@ export function usarTaqueria(rol) {
         )
       );
 
-    const alPlatilloListo = ({ item, mesa_numero, etiqueta }) =>
+    const dondeEs = (mesa_numero, etiqueta) =>
+      `Mesa ${mesa_numero}${etiqueta ? ` (${etiqueta})` : ''}`;
+
+    const alPlatilloListo = ({ item, mesa_numero, etiqueta }) => {
+      sonar('listo');
       setAvisos((previos) => [
         ...previos,
         {
           id: `listo-${item.id}-${Date.now()}`,
           tipo: 'listo',
-          texto: `Mesa ${mesa_numero}${etiqueta ? ` (${etiqueta})` : ''}: ${item.cantidad}× ${item.nombre_snapshot}`,
+          texto: `${dondeEs(mesa_numero, etiqueta)}: ${item.cantidad}× ${item.nombre_snapshot}`,
         },
       ]);
+    };
+
+    const alPlatilloPreparando = ({ item, mesa_numero, etiqueta }) => {
+      sonar('preparando');
+      setAvisos((previos) => [
+        ...previos,
+        {
+          id: `preparando-${item.id}-${Date.now()}`,
+          tipo: 'preparando',
+          texto: `Haciéndose — ${dondeEs(mesa_numero, etiqueta)}: ${item.cantidad}× ${item.nombre_snapshot}`,
+        },
+      ]);
+    };
+
+    const alPedidoNuevo = ({ mesa_numero, etiqueta, cuantos }) => {
+      sonar('pedido');
+      setAvisos((previos) => [
+        ...previos,
+        {
+          id: `pedido-${mesa_numero}-${Date.now()}`,
+          tipo: 'pedido',
+          texto: `Pedido nuevo — ${dondeEs(mesa_numero, etiqueta)}: ${cuantos} ${cuantos === 1 ? 'platillo' : 'platillos'}`,
+        },
+      ]);
+    };
 
     socket.on('connect', alConectar);
     socket.on('disconnect', alDesconectar);
@@ -175,6 +205,8 @@ export function usarTaqueria(rol) {
     socket.on('cocina:pendientes', alCocina);
     socket.on('item:estado', alItemEstado);
     socket.on('aviso:platillo-listo', alPlatilloListo);
+    socket.on('aviso:platillo-preparando', alPlatilloPreparando);
+    socket.on('aviso:pedido-nuevo', alPedidoNuevo);
 
     if (socket.connected) alConectar();
     refrescarPendientes();
@@ -189,8 +221,10 @@ export function usarTaqueria(rol) {
       socket.off('cocina:pendientes', alCocina);
       socket.off('item:estado', alItemEstado);
       socket.off('aviso:platillo-listo', alPlatilloListo);
+      socket.off('aviso:platillo-preparando', alPlatilloPreparando);
+      socket.off('aviso:pedido-nuevo', alPedidoNuevo);
     };
-  }, [rol, recargar, drenar, refrescarPendientes, guardarComanda]);
+  }, [rol, meseroId, recargar, drenar, refrescarPendientes, guardarComanda]);
 
   /**
    * Manda algo al servidor. Si la red falla, lo deja en la cola y avisa que

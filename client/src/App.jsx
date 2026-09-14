@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.js';
 import { usarTaqueria } from './usarTaqueria.js';
 import { Avisos, EstadoRed, FranjaOffline } from './componentes/Comunes.jsx';
+import { estaSilenciado, silenciar, sonar } from './sonido.js';
 import { Mesera } from './pantallas/Mesera.jsx';
 import { Cocina } from './pantallas/Cocina.jsx';
 import { Caja } from './pantallas/Caja.jsx';
@@ -205,6 +206,37 @@ const TITULOS = {
   admin: 'Encargado',
 };
 
+/**
+ * Apagador del sonido, por tablet. La preferencia se guarda en el dispositivo:
+ * la caja puede quererlo callado por estar junto al cliente mientras cocina lo
+ * necesita a todo volumen, y son la misma build.
+ *
+ * Al prenderlo suena el aviso de prueba: es un boton cuyo efecto no se ve, y
+ * sin esa confirmacion nadie sabe si quedo funcionando hasta que se pierde un
+ * pedido.
+ */
+function BotonSonido() {
+  const [callado, setCallado] = useState(estaSilenciado);
+
+  const alternar = () => {
+    const nuevo = !callado;
+    silenciar(nuevo);
+    setCallado(nuevo);
+    if (!nuevo) sonar('listo');
+  };
+
+  return (
+    <button
+      className="boton chico"
+      onClick={alternar}
+      aria-pressed={callado}
+      title={callado ? 'Prender el sonido de los avisos' : 'Silenciar los avisos'}
+    >
+      {callado ? '🔇' : '🔔'}
+    </button>
+  );
+}
+
 /** Barra superior, igual para todas las pantallas. */
 function Barra({ rol, mesero, conectado, pendientes, alCambiarRol, alCerrarSesion, tiempoReal }) {
   return (
@@ -214,6 +246,7 @@ function Barra({ rol, mesero, conectado, pendientes, alCambiarRol, alCerrarSesio
       <span className="relleno" />
       {/* La tablet del encargado no vive del tiempo real: pintarle un punto de
           conexion sugeriria que hay pedidos llegando aqui, y no los hay. */}
+      {tiempoReal && <BotonSonido />}
       {tiempoReal && <EstadoRed conectado={conectado} pendientes={pendientes} />}
       {mesero ? (
         <>
@@ -272,7 +305,7 @@ function Pantalla({ rol, mesero, alCambiarRol, alCerrarSesion }) {
     avisos,
     enviar,
     descartarAviso,
-  } = usarTaqueria(rol);
+  } = usarTaqueria(rol, mesero?.id ?? null);
 
   const cuerpo =
     rol === 'mesera' ? (
