@@ -12,6 +12,10 @@
 
 const LLAVE_SILENCIO = 'taqueria:silencio';
 
+// Alto a proposito: esto compite con la plancha, la musica y la gente. Es lo
+// mas que se puede subir sin que la bocina de una tablet empiece a distorsionar.
+const VOLUMEN = 0.5;
+
 /** Cada aviso: notas (Hz), cuanto dura cada una y el hueco entre ellas. */
 const AVISOS = {
   preparando: { notas: [440], duracion: 0.12, hueco: 0 },
@@ -21,12 +25,6 @@ const AVISOS = {
 
 let contexto = null;
 
-/**
- * El navegador no deja crear audio antes de que el usuario toque la pantalla,
- * asi que el contexto se crea tarde, en el primer aviso. Si el puesto todavia
- * no ha tocado nada, `resume()` queda pendiente y el aviso se pierde; es
- * preferible a estorbar con un permiso al abrir la app.
- */
 function obtenerContexto() {
   if (!contexto) {
     const Audio = window.AudioContext ?? window.webkitAudioContext;
@@ -35,6 +33,50 @@ function obtenerContexto() {
   }
   if (contexto.state === 'suspended') contexto.resume().catch(() => {});
   return contexto;
+}
+
+/**
+ * Destraba el audio con el primer toque en la pantalla.
+ *
+ * En iPad (y en Safari en general) un AudioContext solo se puede desbloquear
+ * DENTRO del gesto del usuario. Nuestros avisos nacen de eventos del socket,
+ * que no son gestos: si el contexto se creara ahi, `resume()` quedaria
+ * pendiente para siempre y la tablet nunca sonaria. Por eso se prepara antes,
+ * aprovechando el primer toque que de el puesto en cualquier parte.
+ *
+ * El tono mudo es el truco que exige iOS: no basta con crear el contexto, hay
+ * que reproducir algo real dentro del gesto para que quede habilitado.
+ *
+ * Se escucha en captura y sin `once` propio: el listener se quita solo cuando
+ * el contexto queda corriendo, no con el primer toque a secas, porque un toque
+ * puede llegar antes de que el navegador este listo para desbloquearlo.
+ */
+function preparar() {
+  const ctx = obtenerContexto();
+  if (!ctx) return;
+
+  try {
+    const osc = ctx.createOscillator();
+    const vol = ctx.createGain();
+    vol.gain.value = 0;
+    osc.connect(vol).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.01);
+  } catch {
+    // Si el navegador no deja ni esto, el toque siguiente lo vuelve a intentar.
+  }
+
+  if (ctx.state === 'running') {
+    for (const evento of ['pointerdown', 'touchstart', 'keydown']) {
+      window.removeEventListener(evento, preparar, true);
+    }
+  }
+}
+
+if (typeof window !== 'undefined') {
+  for (const evento of ['pointerdown', 'touchstart', 'keydown']) {
+    window.addEventListener(evento, preparar, true);
+  }
 }
 
 export function estaSilenciado() {
@@ -81,8 +123,8 @@ export function sonar(tipo) {
       // Subida y bajada suaves. Un corte seco produce un chasquido que en una
       // bocina de tablet se oye como falla.
       vol.gain.setValueAtTime(0, desde);
-      vol.gain.linearRampToValueAtTime(0.22, desde + 0.012);
-      vol.gain.setValueAtTime(0.22, desde + aviso.duracion - 0.03);
+      vol.gain.linearRampToValueAtTime(VOLUMEN, desde + 0.012);
+      vol.gain.setValueAtTime(VOLUMEN, desde + aviso.duracion - 0.03);
       vol.gain.linearRampToValueAtTime(0, desde + aviso.duracion);
 
       osc.connect(vol).connect(ctx.destination);
