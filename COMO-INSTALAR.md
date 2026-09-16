@@ -45,20 +45,16 @@ computadora nueva:
 
 ## Paso 1.5 — Poner la clave del encargado
 
-La clave no viene en el ZIP (si viniera, estaria publicada junto con el codigo).
-Hay que ponerla una vez en la computadora nueva:
+La clave no viene en la descarga: si viniera, estaria publicada junto con el
+codigo. Se pone una vez, con un boton:
 
-1. Entra a la carpeta `server`
-2. Busca el archivo **`.env.ejemplo`** y hazle una copia
-3. A la copia ponle de nombre **`.env`** (sin `.ejemplo`)
-4. Abrelo con el Bloc de notas y escribe la clave que quieras:
+**Doble clic en `PONER-CLAVE.bat`**
 
-```
-TAQUERIA_USUARIO=algodones
-TAQUERIA_CLAVE=la-clave-que-tu-decidas
-```
+Te pregunta el usuario (dale Enter para dejar `algodones`) y la contraseña que
+quieras. La guarda y listo.
 
-Esa es la que van a usar para entrar a la pantalla del Encargado.
+Esa es la clave para entrar a la pantalla del Encargado. Si algun dia quieres
+cambiarla, vuelves a darle doble clic al mismo boton.
 
 ---
 
@@ -111,6 +107,7 @@ Clave del encargado: la que pusiste en `server/.env`
 | **INICIAR.bat** | Levantar el servidor si se cayó. |
 | **DETENER.bat** | Pararlo antes de mover o actualizar. |
 | **RESPALDAR.bat** | Respaldo a mano, antes de algo delicado. |
+| **PONER-CLAVE.bat** | Cambiar la clave del encargado. |
 
 ---
 
