@@ -28,7 +28,11 @@ function TarjetaComanda({ grupo, enviar }) {
   return (
     <div className={`comanda-cocina ${urgencia}`}>
       <div className="cabeza">
-        <span className="mesa-num">Mesa {grupo.mesa_numero}</span>
+        {/* Una venta de mostrador no tiene mesa: decir "Mesa undefined" haria
+            que cocina buscara una mesa que no existe. Es para llevar. */}
+        <span className="mesa-num">
+          {grupo.mostrador ? 'Mostrador' : `Mesa ${grupo.mesa_numero}`}
+        </span>
         {grupo.etiqueta && (
           <span style={{ color: 'var(--texto-tenue)', fontSize: 14 }}>{grupo.etiqueta}</span>
         )}

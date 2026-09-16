@@ -41,8 +41,10 @@ export function crearServicio(db) {
     comandaPorId: db.prepare('SELECT * FROM comandas WHERE id = ?'),
     comandaPorClientId: db.prepare('SELECT * FROM comandas WHERE client_id = ?'),
     insertarComanda: db.prepare(
-      `INSERT INTO comandas (client_id, mesa_id, etiqueta, mesera, mesero_id)
-       VALUES (@client_id, @mesa_id, @etiqueta, @mesera, @mesero_id)`
+      `INSERT INTO comandas (client_id, mesa_id, etiqueta, mesera, mesero_id,
+                             venta_libre, concepto, total_centavos)
+       VALUES (@client_id, @mesa_id, @etiqueta, @mesera, @mesero_id,
+               @venta_libre, @concepto, @total_centavos)`
     ),
     comandasPorEstado: db.prepare(
       'SELECT * FROM comandas WHERE estado = ? ORDER BY creado_en'
@@ -95,11 +97,15 @@ export function crearServicio(db) {
     ),
     marcarItemPagado: db.prepare('UPDATE comanda_items SET pago_id = ? WHERE id = ?'),
 
+    // LEFT JOIN y no JOIN: una venta de mostrador no tiene mesa, y con un join
+    // interno sus platillos desaparecerian de la pantalla de cocina sin que
+    // nadie se enterara. Es justo el pedido que mas prisa tiene, porque el
+    // cliente esta parado en la caja esperandolo.
     itemsPendientesCocina: db.prepare(
       `SELECT i.*, c.mesa_id, c.etiqueta, c.mesera, m.numero AS mesa_numero
          FROM comanda_items i
          JOIN comandas c ON c.id = i.comanda_id
-         JOIN mesas    m ON m.id = c.mesa_id
+         LEFT JOIN mesas m ON m.id = c.mesa_id
         WHERE i.estado IN ('recibido', 'preparando')
         ORDER BY i.creado_en`
     ),
@@ -107,16 +113,31 @@ export function crearServicio(db) {
 
   // --- Helpers internos (siempre corren dentro de una transaccion) ---
 
-  /** Recalcula el total cacheado de la comanda desde sus items. */
+  /**
+   * Recalcula el total cacheado de la comanda desde sus items.
+   *
+   * Una venta libre no tiene items: su total lo fijo la caja al escribirlo y
+   * recalcularlo desde items lo pondria en cero, que es justo el dinero que se
+   * acaba de cobrar. Por eso se devuelve tal cual sin tocarlo.
+   */
   function recalcularTotal(comandaId) {
+    const comanda = q.comandaPorId.get(comandaId);
+    if (comanda?.venta_libre === 1) return comanda.total_centavos;
     const items = q.itemsDeComanda.all(comandaId);
     const total = totalComanda(items);
     q.actualizarTotal.run(total, comandaId);
     return total;
   }
 
-  /** La mesa esta ocupada si y solo si tiene al menos una comanda abierta. */
+  /**
+   * La mesa esta ocupada si y solo si tiene al menos una comanda abierta.
+   *
+   * Una venta de mostrador no tiene mesa que ocupar ni que liberar, asi que
+   * aqui no hay nada que hacer. Se checa en un solo lugar en vez de en cada
+   * quien llama: abrir, cobrar y cancelar pasan todos por esta funcion.
+   */
   function sincronizarEstadoMesa(mesaId) {
+    if (mesaId == null) return;
     const { n } = q.contarAbiertasDeMesa.get(mesaId);
     q.marcarMesa.run(n > 0 ? 'ocupada' : 'libre', mesaId);
   }
@@ -129,7 +150,7 @@ export function crearServicio(db) {
       precio_unitario: centavosAPesos(item.precio_unitario_centavos),
       pagado: item.pago_id != null,
     }));
-    const mesa = q.mesaPorId.get(fila.mesa_id);
+    const mesa = fila.mesa_id != null ? q.mesaPorId.get(fila.mesa_id) : null;
     const pagos = q.pagosDeComanda.all(fila.id).map((p) => ({
       ...p,
       monto: centavosAPesos(p.monto_centavos),
@@ -145,6 +166,9 @@ export function crearServicio(db) {
     return {
       ...fila,
       mesa_numero: mesa?.numero ?? null,
+      // Bandera explicita para las pantallas: "sin mesa" y "mesa que no se
+      // pudo leer" se ven igual mirando solo mesa_numero, y no son lo mismo.
+      mostrador: fila.mesa_id == null,
       items,
       pagos,
       total: centavosAPesos(fila.total_centavos),
@@ -198,7 +222,10 @@ export function crearServicio(db) {
       const previa = q.comandaPorClientId.get(client_id);
       if (previa) return { comanda: armarComanda(previa), duplicada: true };
     }
-    if (!q.mesaPorId.get(mesa_id)) throw noEncontrado('la mesa', mesa_id);
+    // Sin mesa = venta de mostrador. Con mesa, tiene que existir: una comanda
+    // apuntando a una mesa inventada rompe el historial.
+    const enMostrador = mesa_id == null;
+    if (!enMostrador && !q.mesaPorId.get(mesa_id)) throw noEncontrado('la mesa', mesa_id);
 
     // El nombre se toma del mesero con sesion iniciada, no de lo que mande la
     // tablet: asi no puede quedar una cuenta a nombre de alguien que no existe.
@@ -207,10 +234,13 @@ export function crearServicio(db) {
 
     const { lastInsertRowid } = q.insertarComanda.run({
       client_id: client_id ?? null,
-      mesa_id,
+      mesa_id: enMostrador ? null : mesa_id,
       etiqueta: etiqueta ?? null,
       mesera: mesero?.nombre ?? mesera ?? null,
       mesero_id: mesero?.id ?? null,
+      venta_libre: 0,
+      concepto: null,
+      total_centavos: 0,
     });
     sincronizarEstadoMesa(mesa_id);
     // node:sqlite puede devolver el rowid como BigInt; normalizarlo aqui evita
@@ -360,7 +390,9 @@ export function crearServicio(db) {
 
       const total = recalcularTotal(comanda_id);
       const items = q.itemsDeComanda.all(comanda_id);
-      if (total === 0 && items.length === 0) {
+      // Una venta libre es legitimamente una cuenta sin platillos: su monto lo
+      // escribio la caja. Exigirle items la haria imposible de cobrar.
+      if (total === 0 && items.length === 0 && comanda.venta_libre !== 1) {
         throw new ErrorApi(409, 'comanda_vacia', 'No se puede cobrar una comanda sin platillos');
       }
 
@@ -472,6 +504,124 @@ export function crearServicio(db) {
   });
 
   /**
+   * Venta de mostrador: se abre la cuenta, se le cargan los platillos y se
+   * cobra, TODO en una sola transaccion.
+   *
+   * Que sea una sola transaccion es el punto entero de que esto exista como
+   * operacion y no como tres llamadas seguidas desde la tablet. Si la caja
+   * abriera, agregara y cobrara por separado y se fuera la luz a la mitad,
+   * quedaria una cuenta abierta sin mesa que nadie ve en ninguna pantalla:
+   * no esta en las mesas porque no tiene mesa, y el cliente ya se fue con sus
+   * tacos. Aqui o entra la venta completa o no entra nada.
+   *
+   * El client_id manda igual que en todo lo demas: si la respuesta se pierde y
+   * la tablet reintenta, se devuelve la venta que ya se hizo en vez de cobrarla
+   * dos veces. Se checa contra `comandas` porque la comanda es lo primero que
+   * se inserta: si existe, la transaccion completa ya se habia comiteado.
+   */
+  const ventaMostrador = db.transaction(
+    ({ client_id, items, metodo = 'efectivo', etiqueta, mesero_id }) => {
+      if (client_id) {
+        const previa = q.comandaPorClientId.get(client_id);
+        if (previa) {
+          const comanda = armarComanda(previa);
+          return { comanda, pago: q.pagosDeComanda.all(previa.id)[0] ?? null, duplicada: true };
+        }
+      }
+      if (!Array.isArray(items) || items.length === 0) {
+        throw new ErrorApi(400, 'sin_items', 'No se envio ningun platillo');
+      }
+
+      const mesero = mesero_id != null ? q.meseroPorId.get(mesero_id) : null;
+      if (mesero_id != null && !mesero) throw noEncontrado('el mesero', mesero_id);
+
+      const { lastInsertRowid } = q.insertarComanda.run({
+        client_id: client_id ?? null,
+        mesa_id: null,
+        etiqueta: etiqueta?.trim() || null,
+        mesera: mesero?.nombre ?? null,
+        mesero_id: mesero?.id ?? null,
+        venta_libre: 0,
+        concepto: null,
+        total_centavos: 0,
+      });
+      const comandaId = Number(lastInsertRowid);
+
+      // Se reusan agregarItems y registrarPago tal cual: validan agotados,
+      // cantidades y montos igual que siempre, y al estar ya dentro de esta
+      // transaccion se suman a ella en vez de abrir la suya (ver db.js).
+      const { agregados } = agregarItems(comandaId, items);
+      const { pago, comanda } = registrarPago({
+        comanda_id: comandaId,
+        metodo,
+        tipo: 'total',
+      });
+
+      return { comanda, pago, agregados, duplicada: false };
+    }
+  );
+
+  /**
+   * Cobro de cantidad libre: la caja escribe un monto y cobra, sin picar
+   * platillos.
+   *
+   * Para lo que no esta en el menu o no vale la pena capturar: un pedido que se
+   * levanto por telefono, un encargo especial, algo que se acordo de palabra
+   * con el cliente. Antes habia que inventar platillos o armar un carrito que
+   * no correspondia a nada.
+   *
+   * Es una comanda como cualquier otra (por eso entra al corte y al historial
+   * sin ningun caso especial), pero marcada con venta_libre = 1 y sin items. Su
+   * total NO sale de sumar platillos: es el monto que se escribio, y se guarda
+   * al insertar para que la comanda nazca ya cuadrada.
+   *
+   * El concepto es opcional pero se pide en la pantalla: sin el, el corte
+   * acaba con renglones de dinero que nadie puede explicar tres dias despues.
+   */
+  const ventaLibre = db.transaction(
+    ({ client_id, monto_centavos, concepto, metodo = 'efectivo', mesero_id }) => {
+      if (client_id) {
+        const previa = q.comandaPorClientId.get(client_id);
+        if (previa) {
+          const comanda = armarComanda(previa);
+          return { comanda, pago: q.pagosDeComanda.all(previa.id)[0] ?? null, duplicada: true };
+        }
+      }
+
+      const monto = Number(monto_centavos);
+      if (!Number.isInteger(monto) || monto <= 0) {
+        throw new ErrorApi(400, 'monto_invalido', `Monto invalido: ${monto_centavos}`);
+      }
+
+      const mesero = mesero_id != null ? q.meseroPorId.get(mesero_id) : null;
+      if (mesero_id != null && !mesero) throw noEncontrado('el mesero', mesero_id);
+
+      const { lastInsertRowid } = q.insertarComanda.run({
+        client_id: client_id ?? null,
+        mesa_id: null,
+        etiqueta: null,
+        mesera: mesero?.nombre ?? null,
+        mesero_id: mesero?.id ?? null,
+        venta_libre: 1,
+        concepto: concepto?.trim() || null,
+        // El total se fija aqui y recalcularTotal lo respeta al ver la bandera.
+        total_centavos: monto,
+      });
+      const comandaId = Number(lastInsertRowid);
+
+      // tipo 'total' liquida el saldo, que es exactamente el monto escrito, y
+      // deja que el servidor cierre la comanda como en cualquier otro cobro.
+      const { pago, comanda } = registrarPago({
+        comanda_id: comandaId,
+        metodo,
+        tipo: 'total',
+      });
+
+      return { comanda, pago, duplicada: false };
+    }
+  );
+
+  /**
    * Cancela una cuenta a la que nunca se le pidio nada: se abrio la mesa y el
    * cliente se fue antes de ordenar. Sin esto quedaba atrapada para siempre,
    * porque cerrar una comanda solo ocurre como consecuencia de un pago y un
@@ -522,6 +672,7 @@ export function crearServicio(db) {
           comanda_id: fila.comanda_id,
           mesa_id: fila.mesa_id,
           mesa_numero: fila.mesa_numero,
+          mostrador: fila.mesa_id == null,
           etiqueta: fila.etiqueta,
           mesera: fila.mesera,
           desde: fila.creado_en,
@@ -546,6 +697,8 @@ export function crearServicio(db) {
     cambiarEstadoItem,
     registrarPago,
     cerrarComanda,
+    ventaMostrador,
+    ventaLibre,
     cancelarComandaVacia,
     pendientesCocina,
   };

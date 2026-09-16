@@ -237,7 +237,7 @@ export function Reportes() {
             <div key={c.id} className="renglon-reporte">
               <div className="info">
                 <div className="nombre">
-                  Mesa {c.mesa_numero ?? '—'}
+                  {c.mostrador ? 'Mostrador' : `Mesa ${c.mesa_numero ?? '—'}`}
                   {c.etiqueta ? ` · ${c.etiqueta}` : ''}
                 </div>
                 <div className="detalle">

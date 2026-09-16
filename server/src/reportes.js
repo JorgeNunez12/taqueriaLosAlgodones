@@ -97,7 +97,10 @@ export function crearReportes(db) {
     // cuentas viejas pueden no tener id (es columna agregada despues), y el
     // nombre sobrevive aunque al mesero lo den de baja.
     porMesero: db.prepare(
-      `SELECT COALESCE(c.mesera, 'sin asignar')     AS mesero,
+      `SELECT CASE
+                WHEN c.mesa_id IS NULL THEN 'mostrador'
+                ELSE COALESCE(c.mesera, 'sin asignar')
+              END                                   AS mesero,
               COUNT(DISTINCT c.id)                  AS cuentas,
               COALESCE(SUM(p.monto_centavos), 0)    AS total
          FROM pagos p
@@ -105,6 +108,47 @@ export function crearReportes(db) {
         WHERE date(p.creado_en) = ?
         GROUP BY mesero
         ORDER BY total DESC`
+    ),
+
+    // Las ventas de mostrador aparte. Van en su propio renglon del corte
+    // porque responden otra pregunta: no "quien vendio mas" sino "cuanto se
+    // fue para llevar". Mezcladas en 'sin asignar' se confundirian con las
+    // cuentas que alguien abrio sin iniciar sesion, que es un descuido, no
+    // una forma de vender.
+    mostrador: db.prepare(
+      `SELECT COUNT(DISTINCT c.id)                  AS cuentas,
+              COALESCE(SUM(p.monto_centavos), 0)    AS total
+         FROM pagos p
+         JOIN comandas c ON c.id = p.comanda_id
+        WHERE date(p.creado_en) = ?
+          AND c.mesa_id IS NULL
+          AND c.venta_libre = 0`
+    ),
+
+    // Los cobros de cantidad libre, aparte. Son ventas sin mesa igual que las
+    // de mostrador, pero se separan a proposito: en las de mostrador se sabe
+    // que se vendio (hay platillos), y en estas solo hay un monto que alguien
+    // escribio. Verlas juntas escondería justo lo que hay que vigilar.
+    ventasLibres: db.prepare(
+      `SELECT COUNT(DISTINCT c.id)                  AS cuentas,
+              COALESCE(SUM(p.monto_centavos), 0)    AS total
+         FROM pagos p
+         JOIN comandas c ON c.id = p.comanda_id
+        WHERE date(p.creado_en) = ?
+          AND c.venta_libre = 1`
+    ),
+
+    // El detalle de cada una, para que el encargado pueda revisarlas una por
+    // una sin salir del corte: un total agregado no dice si fueron cuatro
+    // pedidos por telefono o un cobro raro de $800.
+    detalleVentasLibres: db.prepare(
+      `SELECT c.id, c.concepto, c.total_centavos, c.creado_en, c.mesera,
+              p.metodo
+         FROM comandas c
+         JOIN pagos p ON p.comanda_id = c.id
+        WHERE date(p.creado_en) = ?
+          AND c.venta_libre = 1
+        ORDER BY p.creado_en DESC`
     ),
 
     // --- Contadores del dia ---
@@ -221,6 +265,14 @@ export function crearReportes(db) {
         total_centavos: cancelado.total_centavos,
         total_formateado: cancelado.total_formateado,
       },
+      mostrador: conMoneda(q.mostrador.get(fecha) ?? { cuentas: 0, total: 0 }),
+      ventas_libres: {
+        ...conMoneda(q.ventasLibres.get(fecha) ?? { cuentas: 0, total: 0 }),
+        detalle: q.detalleVentasLibres.all(fecha).map((v) => ({
+          ...v,
+          total_formateado: formatoMoneda(v.total_centavos),
+        })),
+      },
       metodos,
       platillos,
       categorias: q.porCategoria.all(fecha).map((f) => conMoneda(f)),
@@ -233,6 +285,10 @@ export function crearReportes(db) {
   function historial(fecha = hoyLocal()) {
     return q.comandasCerradas.all(fecha).map((c) => ({
       ...c,
+      // Una venta libre tampoco tiene mesa, pero no es una venta de mostrador:
+      // la pantalla las pinta distinto y necesita poder distinguirlas.
+      mostrador: c.mesa_id == null && c.venta_libre !== 1,
+      venta_libre: c.venta_libre === 1,
       total: centavosAPesos(c.total_centavos),
       total_formateado: formatoMoneda(c.total_centavos),
     }));

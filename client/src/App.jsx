@@ -4,7 +4,7 @@
 // suyo y el mesero no tenga que identificarse en cada cuenta.
 
 import { useCallback, useEffect, useState } from 'react';
-import { api } from './api.js';
+import { api, sesionEncargado } from './api.js';
 import { usarTaqueria } from './usarTaqueria.js';
 import { Avisos, EstadoRed, FranjaOffline } from './componentes/Comunes.jsx';
 import { estaSilenciado, silenciar, sonar } from './sonido.js';
@@ -85,7 +85,7 @@ export function App() {
 
   // El encargado no toma pedidos: su tablet no necesita el estado en vivo del
   // local, solo consultar y configurar.
-  if (rol === 'admin') return <PantallaAdmin alCambiarRol={() => setRol(null)} />;
+  if (rol === 'admin') return <Encargado alCambiarRol={() => setRol(null)} />;
 
   // Solo la tablet de meseros necesita saber quien la trae: cocina y caja son
   // puestos fijos, y pedirles identificarse cada turno seria un estorbo.
@@ -117,6 +117,7 @@ function ElegirRol({ alElegir }) {
           </button>
         ))}
       </div>
+      <p className="desde">Desde 1995</p>
     </div>
   );
 }
@@ -238,7 +239,7 @@ function BotonSonido() {
 }
 
 /** Barra superior, igual para todas las pantallas. */
-function Barra({ rol, mesero, conectado, pendientes, alCambiarRol, alCerrarSesion, tiempoReal }) {
+function Barra({ rol, mesero, conectado, pendientes, alCambiarRol, alCerrarSesion, alSalir, tiempoReal }) {
   return (
     <div className="barra">
       <img src="/logo.png" alt="" className="logo-barra" />
@@ -258,10 +259,130 @@ function Barra({ rol, mesero, conectado, pendientes, alCambiarRol, alCerrarSesio
           </button>
         </>
       ) : (
-        <button className="boton chico" onClick={alCambiarRol}>
-          Cambiar
-        </button>
+        <>
+          {/* El encargado cierra su sesion sin cambiarle el uso a la tablet:
+              son dos cosas distintas y la de todos los dias es la primera. */}
+          {alSalir && (
+            <button className="boton chico" onClick={alSalir}>
+              Salir
+            </button>
+          )}
+          <button className="boton chico" onClick={alCambiarRol}>
+            Cambiar
+          </button>
+        </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Puerta de la tablet del encargado: sin sesion, pide usuario y contraseña.
+ *
+ * El candado de verdad esta en el servidor (las rutas /api/reportes y
+ * /api/admin exigen el token); esto es la cara visible de ese candado. Por eso
+ * el estado inicial sale de si hay token guardado, no de una bandera aparte:
+ * si el token vence a media consulta, la llamada devuelve 401, api.js lo borra
+ * y la pantalla vuelve sola a pedir la clave.
+ */
+function Encargado({ alCambiarRol }) {
+  const [entro, setEntro] = useState(() => sesionEncargado.token() != null);
+
+  const salir = useCallback(() => {
+    sesionEncargado.borrar();
+    setEntro(false);
+  }, []);
+
+  // El token se puede caer solo: vence a las 12 horas, o el mini PC se reinicio
+  // y las sesiones viejas dejaron de valer. Cuando eso pasa, api.js lo borra al
+  // recibir el 401, pero esta pantalla seguiria montada enseñando un error que
+  // no se arregla reintentando. Se revisa cada rato para volver al acceso solo.
+  useEffect(() => {
+    if (!entro) return;
+    const revisar = () => {
+      if (sesionEncargado.token() == null) setEntro(false);
+    };
+    const id = setInterval(revisar, 5000);
+    return () => clearInterval(id);
+  }, [entro]);
+
+  if (!entro) {
+    return <AccesoEncargado alEntrar={() => setEntro(true)} alCambiarRol={alCambiarRol} />;
+  }
+
+  return <PantallaAdmin alCambiarRol={alCambiarRol} alSalir={salir} alExpirar={salir} />;
+}
+
+function AccesoEncargado({ alEntrar, alCambiarRol }) {
+  const [usuario, setUsuario] = useState('');
+  const [clave, setClave] = useState('');
+  const [error, setError] = useState(null);
+  const [entrando, setEntrando] = useState(false);
+
+  async function acceder(e) {
+    e?.preventDefault();
+    if (!usuario.trim() || !clave) return;
+    setEntrando(true);
+    setError(null);
+    try {
+      const { token } = await api.acceder(usuario.trim(), clave);
+      sesionEncargado.guardar(token);
+      alEntrar();
+    } catch (err) {
+      // Se limpia la contraseña y no el usuario: casi siempre el dedo fallo en
+      // la clave, y volver a escribir las dos cosas en una tablet estorba.
+      setClave('');
+      setError(err.message);
+    } finally {
+      setEntrando(false);
+    }
+  }
+
+  return (
+    <div className="pantalla-inicio">
+      <img src="/logo.png" alt="Tacos Los Algodones" className="logo-inicio chico" />
+      <h1>Encargado</h1>
+      <p>Esta pantalla tiene el corte del día y el menú.</p>
+
+      <form className="acceso-encargado" onSubmit={acceder}>
+        {error && <p className="error-texto">{error}</p>}
+
+        <div className="campo">
+          <label htmlFor="usuario-encargado">Usuario</label>
+          <input
+            id="usuario-encargado"
+            value={usuario}
+            onChange={(e) => setUsuario(e.target.value)}
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck="false"
+          />
+        </div>
+
+        <div className="campo">
+          <label htmlFor="clave-encargado">Contraseña</label>
+          <input
+            id="clave-encargado"
+            type="password"
+            value={clave}
+            onChange={(e) => setClave(e.target.value)}
+            autoComplete="current-password"
+          />
+        </div>
+
+        <button
+          type="submit"
+          className="boton primario"
+          disabled={entrando || !usuario.trim() || !clave}
+        >
+          {entrando ? 'Entrando…' : 'Entrar'}
+        </button>
+      </form>
+
+      <button className="boton chico" style={{ marginTop: 24 }} onClick={alCambiarRol}>
+        Cambiar el uso de esta tablet
+      </button>
     </div>
   );
 }
@@ -272,12 +393,12 @@ function Barra({ rol, mesero, conectado, pendientes, alCambiarRol, alCerrarSesio
  * que se mueve solo mientras se esta cuadrando es peor que uno quieto, y un
  * socket abierto de mas es una tablet que recibe eventos que no va a pintar.
  */
-function PantallaAdmin({ alCambiarRol }) {
+function PantallaAdmin({ alCambiarRol, alSalir }) {
   const [vista, setVista] = useState('reportes');
 
   return (
     <div className="app">
-      <Barra rol="admin" alCambiarRol={alCambiarRol} tiempoReal={false} />
+      <Barra rol="admin" alCambiarRol={alCambiarRol} alSalir={alSalir} tiempoReal={false} />
       <div className="pestanas-principales">
         <button
           className={vista === 'reportes' ? 'activa' : ''}
@@ -320,7 +441,7 @@ function Pantalla({ rol, mesero, alCambiarRol, alCerrarSesion }) {
     ) : rol === 'cocina' ? (
       <Cocina cocina={cocina} enviar={enviar} />
     ) : (
-      <Caja comandas={comandas} enviar={enviar} />
+      <Caja comandas={comandas} enviar={enviar} conectado={conectado} />
     );
 
   return (

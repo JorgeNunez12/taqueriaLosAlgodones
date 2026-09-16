@@ -10,6 +10,7 @@ import { abrirDb } from './db.js';
 import { crearServicio, ErrorApi } from './servicio.js';
 import { crearReportes, normalizarFecha } from './reportes.js';
 import { crearAdmin } from './admin.js';
+import { exigirEncargado, iniciarSesion } from './acceso.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const RUTA_PWA = path.join(aqui, '..', '..', 'client', 'dist');
@@ -156,6 +157,47 @@ export function crearApp({ db = abrirDb() } = {}) {
     })
   );
 
+  // Venta de mostrador: alguien que llega, pide para llevar y paga ahi mismo,
+  // sin ocupar mesa. Entra por una sola ruta y no por tres (abrir, agregar,
+  // cobrar) porque las tres son una sola venta: partirla dejaria cuentas sin
+  // mesa a medio cobrar si se cae la red entre una y otra.
+  app.post(
+    '/api/ventas-mostrador',
+    ruta((req, res) => {
+      const { comanda, pago, agregados, duplicada } = servicio.ventaMostrador(req.body ?? {});
+
+      if (!duplicada) {
+        // La cuenta nace y muere en el mismo instante, asi que a las tablets se
+        // les avisa solo del cierre: emitir tambien 'comanda:nueva' las haria
+        // pintar una cuenta que ya esta cobrada, aunque fuera por un parpadeo.
+        io.emit('comanda:cerrada', comanda);
+        // Los platillos SI van a cocina: el cliente esta parado en la caja
+        // esperandolos, y sin este aviso nadie los prepara.
+        if (agregados?.length > 0) {
+          io.to('cocina').emit('cocina:pendientes', servicio.pendientesCocina());
+          io.to('cocina').emit('aviso:pedido-nuevo', {
+            mesa_numero: null,
+            etiqueta: comanda.etiqueta ?? 'Mostrador',
+            cuantos: agregados.reduce((suma, i) => suma + i.cantidad, 0),
+          });
+        }
+      }
+      res.status(duplicada ? 200 : 201).json({ comanda, pago, duplicada });
+    })
+  );
+
+  // Cobro de cantidad libre: un monto escrito a mano, sin platillos. No pasa
+  // por cocina (no hay nada que preparar) pero si es dinero que entro, asi que
+  // se avisa el cierre igual que en cualquier otro cobro.
+  app.post(
+    '/api/ventas-libres',
+    ruta((req, res) => {
+      const { comanda, pago, duplicada } = servicio.ventaLibre(req.body ?? {});
+      if (!duplicada) io.emit('comanda:cerrada', comanda);
+      res.status(duplicada ? 200 : 201).json({ comanda, pago, duplicada });
+    })
+  );
+
   // Cuenta que se abrio y nunca se uso. Va aparte de /cerrar porque no entra
   // dinero: no es un cobro de cero, es una cuenta que no existio.
   app.post(
@@ -224,6 +266,30 @@ export function crearApp({ db = abrirDb() } = {}) {
   );
 
   app.get('/api/cocina/pendientes', ruta((_req, res) => res.json(servicio.pendientesCocina())));
+
+  // Historial del dia para la caja.
+  //
+  // Va aqui, ANTES del candado del encargado, y a proposito no es
+  // /api/reportes/historial: la caja necesita poder contestar "¿que le cobre a
+  // la mesa 3 hace rato?" sin la clave del encargado, pero no tiene por que ver
+  // el corte del dia, el total vendido ni cuanto vendio cada mesero.
+  //
+  // Solo el dia de hoy: el historial de dias pasados es una pregunta de
+  // encargado, no de caja, y ese si vive del otro lado del candado.
+  app.get('/api/caja/historial', ruta((_req, res) => res.json(reportes.historial())));
+
+  // --- Acceso del encargado ---
+
+  // Todo lo que sigue (corte del dia, menu y personal) exige haber iniciado
+  // sesion como encargado. La revision vive aqui, en el servidor, y no en la
+  // tablet: esconder el boton en la PWA no sirve de nada cuando cualquiera en
+  // el WiFi puede pegarle a /api/admin desde el navegador.
+  app.post(
+    '/api/acceso',
+    ruta((req, res) => res.json(iniciarSesion(req.body ?? {})))
+  );
+
+  app.use(['/api/reportes', '/api/admin'], exigirEncargado);
 
   // --- Reportes (solo lectura) ---
 

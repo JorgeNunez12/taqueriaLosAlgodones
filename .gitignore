@@ -7,3 +7,18 @@
 # dependencias propias.
 node_modules/
 dist/
+
+# La clave del encargado. Cada computadora tiene la suya y NUNCA se sube:
+# este repositorio se usa para instalar el sistema en otra maquina, y subir
+# la clave la publicaria junto con el codigo.
+.env
+
+# La base de datos con las ventas reales. No va al repositorio por dos
+# razones: trae informacion del negocio (cuentas, cobros, personal), y cambia
+# cada hora, asi que cada commit seria un archivo binario distinto. Para pasar
+# el historial a otra computadora se copia aparte (ver COMO-INSTALAR.md).
+server/datos/*.db
+server/datos/*.db-wal
+server/datos/*.db-shm
+server/datos/respaldos/
+server/datos/servidor.log

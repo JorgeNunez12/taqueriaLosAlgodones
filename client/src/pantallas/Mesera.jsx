@@ -8,7 +8,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import { formatoMoneda, subtotalItem, totalCarrito } from '../dinero.js';
-import { Insignia, Modal } from '../componentes/Comunes.jsx';
+import { ElegirCarne, Insignia, Modal } from '../componentes/Comunes.jsx';
+import { notaConCarne, pideCarne } from '../carnes.js';
 import { nuevoId } from '../identificador.js';
 
 export function Mesera({ mesas, comandas, enviar, conectado, sincronizado, mesero }) {
@@ -255,6 +256,7 @@ function AbrirCuenta({ mesa, mesero, enviar, alCerrar, alEntrar }) {
 function Comanda({ comanda, platillos, enviar, alVolver }) {
   const [carrito, setCarrito] = useState([]);
   const [notasDe, setNotasDe] = useState(null);
+  const [carneDe, setCarneDe] = useState(null); // platillo esperando que digan su carne
   const [mandando, setMandando] = useState(false);
   const [error, setError] = useState(null);
 
@@ -268,10 +270,23 @@ function Comanda({ comanda, platillos, enviar, alVolver }) {
   }, [platillos]);
 
   function agregar(platillo) {
+    // Planchada y pellizcada no caen al carrito hasta saber de que carne son:
+    // es lo primero que cocina necesita y lo que antes se perdia cuando la
+    // mesera traia prisa y no escribia la nota.
+    if (pideCarne(platillo.nombre)) {
+      setCarneDe(platillo);
+      return;
+    }
+    agregarConNota(platillo, '');
+  }
+
+  function agregarConNota(platillo, notas) {
     setCarrito((previo) => {
       // Se apilan las lineas iguales SIN notas; con notas cada una va aparte,
-      // porque "sin cebolla" no se puede fusionar con "con todo".
-      const i = previo.findIndex((l) => l.platillo_id === platillo.id && !l.notas);
+      // porque "sin cebolla" no se puede fusionar con "con todo". Eso es
+      // tambien lo que mantiene separadas una planchada de buche y una de
+      // carnitas, que llevan la carne en la nota.
+      const i = previo.findIndex((l) => l.platillo_id === platillo.id && !l.notas && !notas);
       if (i >= 0) {
         const copia = [...previo];
         copia[i] = { ...copia[i], cantidad: copia[i].cantidad + 1 };
@@ -285,7 +300,7 @@ function Comanda({ comanda, platillos, enviar, alVolver }) {
           nombre: platillo.nombre,
           precio_unitario_centavos: platillo.precio_centavos,
           cantidad: 1,
-          notas: '',
+          notas,
         },
       ];
     });
@@ -443,6 +458,17 @@ function Comanda({ comanda, platillos, enviar, alVolver }) {
           {mandando ? 'Mandando…' : 'Mandar a cocina'}
         </button>
       </div>
+
+      {carneDe && (
+        <ElegirCarne
+          nombre={carneDe.nombre}
+          alElegir={(carne) => {
+            agregarConNota(carneDe, carne);
+            setCarneDe(null);
+          }}
+          alCerrar={() => setCarneDe(null)}
+        />
+      )}
 
       {notasDe && (
         <NotasModal

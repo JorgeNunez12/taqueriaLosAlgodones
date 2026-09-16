@@ -28,12 +28,12 @@ test('el corte se sirve por HTTP y cuadra con lo cobrado', async (t) => {
     body: { metodo_pago: 'efectivo', client_id: uuid() },
   });
 
-  const { status, cuerpo } = await pedir(s.url, '/api/reportes/corte');
+  const { status, cuerpo } = await s.pedir('/api/reportes/corte');
   assert.equal(status, 200);
   assert.equal(cuerpo.cobrado_centavos, 4400);
   assert.equal(cuerpo.cuentas.cerradas, 1);
 
-  const historial = await pedir(s.url, '/api/reportes/historial');
+  const historial = await s.pedir('/api/reportes/historial');
   assert.equal(historial.cuerpo.length, 1);
   assert.equal(historial.cuerpo[0].id, comanda.id);
 });
@@ -42,21 +42,20 @@ test('una fecha invalida en la query no truena: cae en hoy', async (t) => {
   const s = await levantarServidor();
   t.after(() => s.cerrar());
 
-  const basura = await pedir(s.url, '/api/reportes/corte?fecha=no-es-fecha');
+  const basura = await s.pedir('/api/reportes/corte?fecha=no-es-fecha');
   assert.equal(basura.status, 200);
 
   // Y un intento de inyeccion tampoco pasa de ahi.
-  const inyeccion = await pedir(
-    s.url,
+  const inyeccion = await s.pedir(
     `/api/reportes/corte?fecha=${encodeURIComponent("2026-01-01'; DROP TABLE pagos;--")}`
   );
   assert.equal(inyeccion.status, 200);
 
   // La tabla sigue viva: si el DROP hubiera pasado, esto tronaria.
-  const despues = await pedir(s.url, '/api/reportes/corte');
+  const despues = await s.pedir('/api/reportes/corte');
   assert.equal(despues.status, 200);
 
-  const pasado = await pedir(s.url, '/api/reportes/corte?fecha=2020-01-01');
+  const pasado = await s.pedir('/api/reportes/corte?fecha=2020-01-01');
   assert.equal(pasado.cuerpo.fecha, '2020-01-01');
   assert.equal(pasado.cuerpo.cobrado_centavos, 0);
 });
@@ -65,14 +64,14 @@ test('alta, edicion y agotado de un platillo por HTTP', async (t) => {
   const s = await levantarServidor();
   t.after(() => s.cerrar());
 
-  const alta = await pedir(s.url, '/api/admin/platillos', {
+  const alta = await s.pedir('/api/admin/platillos', {
     method: 'POST',
     body: { nombre: 'Volcan', precio: '45.00', categoria: 'especialidades' },
   });
   assert.equal(alta.status, 201);
   assert.equal(alta.cuerpo.precio_centavos, 4500);
 
-  const edicion = await pedir(s.url, `/api/admin/platillos/${alta.cuerpo.id}`, {
+  const edicion = await s.pedir(`/api/admin/platillos/${alta.cuerpo.id}`, {
     method: 'PATCH',
     body: { precio: '48.50' },
   });
@@ -80,7 +79,7 @@ test('alta, edicion y agotado de un platillo por HTTP', async (t) => {
   assert.equal(edicion.cuerpo.precio_centavos, 4850);
   assert.equal(edicion.cuerpo.nombre, 'Volcan', 'lo que no se manda no se pierde');
 
-  const agotar = await pedir(s.url, `/api/admin/platillos/${alta.cuerpo.id}/disponible`, {
+  const agotar = await s.pedir(`/api/admin/platillos/${alta.cuerpo.id}/disponible`, {
     method: 'PATCH',
     body: { disponible: false },
   });
@@ -90,7 +89,7 @@ test('alta, edicion y agotado de un platillo por HTTP', async (t) => {
   const menu = await pedir(s.url, '/api/platillos?disponibles=1');
   assert.ok(!menu.cuerpo.some((p) => p.id === alta.cuerpo.id));
 
-  const borrado = await pedir(s.url, `/api/admin/platillos/${alta.cuerpo.id}`, {
+  const borrado = await s.pedir(`/api/admin/platillos/${alta.cuerpo.id}`, {
     method: 'DELETE',
   });
   assert.equal(borrado.status, 200);
@@ -102,7 +101,7 @@ test('los errores de negocio salen con su codigo, no como 500', async (t) => {
   t.after(() => s.cerrar());
 
   // Precio invalido -> 400 con codigo, no un stack trace.
-  const malPrecio = await pedir(s.url, '/api/admin/platillos', {
+  const malPrecio = await s.pedir('/api/admin/platillos', {
     method: 'POST',
     body: { nombre: 'X', precio: 'gratis', categoria: 'tacos' },
   });
@@ -120,11 +119,11 @@ test('los errores de negocio salen con su codigo, no como 500', async (t) => {
     body: { items: [{ client_id: uuid(), platillo_id: pastor, cantidad: 1 }] },
   });
 
-  const conHistorial = await pedir(s.url, `/api/admin/platillos/${pastor}`, { method: 'DELETE' });
+  const conHistorial = await s.pedir(`/api/admin/platillos/${pastor}`, { method: 'DELETE' });
   assert.equal(conHistorial.status, 409);
   assert.equal(conHistorial.cuerpo.error, 'platillo_con_historial');
 
-  const noExiste = await pedir(s.url, '/api/admin/platillos/9999', {
+  const noExiste = await s.pedir('/api/admin/platillos/9999', {
     method: 'PATCH',
     body: { nombre: 'X' },
   });
@@ -135,7 +134,7 @@ test('alta y baja de personal por HTTP', async (t) => {
   const s = await levantarServidor();
   t.after(() => s.cerrar());
 
-  const alta = await pedir(s.url, '/api/admin/meseros', {
+  const alta = await s.pedir('/api/admin/meseros', {
     method: 'POST',
     body: { nombre: 'Chuy' },
   });
@@ -146,14 +145,14 @@ test('alta y baja de personal por HTTP', async (t) => {
   const paraLogin = await pedir(s.url, '/api/meseros');
   assert.ok(paraLogin.cuerpo.some((m) => m.nombre === 'Chuy'));
 
-  const duplicado = await pedir(s.url, '/api/admin/meseros', {
+  const duplicado = await s.pedir('/api/admin/meseros', {
     method: 'POST',
     body: { nombre: 'Chuy' },
   });
   assert.equal(duplicado.status, 409);
   assert.equal(duplicado.cuerpo.error, 'mesero_duplicado');
 
-  await pedir(s.url, `/api/admin/meseros/${alta.cuerpo.id}`, {
+  await s.pedir(`/api/admin/meseros/${alta.cuerpo.id}`, {
     method: 'PATCH',
     body: { activo: false },
   });
@@ -161,6 +160,6 @@ test('alta y baja de personal por HTTP', async (t) => {
   assert.ok(!despues.cuerpo.some((m) => m.nombre === 'Chuy'), 'ya no aparece para iniciar sesion');
 
   // Pero el encargado sigue viendolo, para poder reactivarlo.
-  const todos = await pedir(s.url, '/api/admin/meseros');
+  const todos = await s.pedir('/api/admin/meseros');
   assert.ok(todos.cuerpo.some((m) => m.nombre === 'Chuy'));
 });

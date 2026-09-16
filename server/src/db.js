@@ -64,6 +64,91 @@ function migrar(db) {
   if (!comandas.has('mesero_id')) {
     db.exec('ALTER TABLE comandas ADD COLUMN mesero_id INTEGER REFERENCES meseros (id)');
   }
+  // Cobro de cantidad libre, agregado cuando la caja pidio poder cobrar sin
+  // picar platillos. Las comandas viejas son todas ventas normales, y el
+  // DEFAULT 0 las deja marcadas asi sin tener que tocarlas una por una.
+  if (!comandas.has('venta_libre')) {
+    db.exec('ALTER TABLE comandas ADD COLUMN venta_libre INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!comandas.has('concepto')) {
+    db.exec('ALTER TABLE comandas ADD COLUMN concepto TEXT');
+  }
+
+  aflojarMesaId(db);
+}
+
+/**
+ * Las ventas de mostrador son comandas sin mesa, y la base vieja declaraba
+ * `mesa_id INTEGER NOT NULL`. SQLite no sabe quitar un NOT NULL con ALTER
+ * TABLE: hay que rehacer la tabla y copiar las filas.
+ *
+ * Se hace una sola vez, y solo si de verdad hace falta: se mira el NOT NULL en
+ * el PRAGMA en vez de intentar un INSERT de prueba, porque esto corre en cada
+ * arranque del mini PC y no queremos tocar la tabla de ventas sin motivo.
+ *
+ * Todo va dentro de una transaccion y con las llaves foraneas apagadas. Apagar
+ * foreign_keys es lo que permite que comanda_items y pagos sigan apuntando a
+ * las comandas mientras la tabla vieja desaparece; al terminar se vuelven a
+ * prender y se verifica que no quedo nada colgando. Si algo falla, el ROLLBACK
+ * deja la base exactamente como estaba: es la base de ventas del negocio y no
+ * puede quedar a medias.
+ */
+function aflojarMesaId(db) {
+  const columna = db
+    .prepare('PRAGMA table_info(comandas)')
+    .all()
+    .find((c) => c.name === 'mesa_id');
+  if (!columna || columna.notnull === 0) return;
+
+  // PRAGMA foreign_keys no se puede cambiar dentro de una transaccion: SQLite
+  // lo ignora en silencio. Por eso va antes del BEGIN.
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    db.exec(`
+      CREATE TABLE comandas_nueva (
+        id              INTEGER PRIMARY KEY,
+        client_id       TEXT    UNIQUE,
+        mesa_id         INTEGER REFERENCES mesas (id),
+        etiqueta        TEXT,
+        mesera          TEXT,
+        mesero_id       INTEGER REFERENCES meseros (id),
+        estado          TEXT    NOT NULL DEFAULT 'abierta'
+                        CHECK (estado IN ('abierta', 'cerrada', 'cancelada')),
+        total_centavos  INTEGER NOT NULL DEFAULT 0,
+        metodo_pago     TEXT,
+        creado_en       TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+        cerrado_en      TEXT
+      );
+      INSERT INTO comandas_nueva
+        (id, client_id, mesa_id, etiqueta, mesera, mesero_id,
+         estado, total_centavos, metodo_pago, creado_en, cerrado_en)
+      SELECT id, client_id, mesa_id, etiqueta, mesera, mesero_id,
+             estado, total_centavos, metodo_pago, creado_en, cerrado_en
+        FROM comandas;
+      DROP TABLE comandas;
+      ALTER TABLE comandas_nueva RENAME TO comandas;
+      CREATE INDEX IF NOT EXISTS idx_comandas_mesa   ON comandas (mesa_id, estado);
+      CREATE INDEX IF NOT EXISTS idx_comandas_estado ON comandas (estado, creado_en);
+    `);
+    db.exec('COMMIT');
+  } catch (err) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // Si ya se deshizo sola, el rollback sobra.
+    }
+    throw err;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+
+  const rotas = db.prepare('PRAGMA foreign_key_check').all();
+  if (rotas.length > 0) {
+    throw new Error(
+      `La migracion de comandas dejo ${rotas.length} referencias rotas; la base no se toco mas.`
+    );
+  }
 }
 
 /**

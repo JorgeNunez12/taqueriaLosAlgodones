@@ -157,8 +157,12 @@ export function usarTaqueria(rol, meseroId = null) {
         )
       );
 
+    // Sin mesa es una venta de mostrador (para llevar). Sin este caso el aviso
+    // decia "Mesa null", que manda a cocina a buscar una mesa inexistente.
     const dondeEs = (mesa_numero, etiqueta) =>
-      `Mesa ${mesa_numero}${etiqueta ? ` (${etiqueta})` : ''}`;
+      mesa_numero == null
+        ? `Mostrador${etiqueta ? ` (${etiqueta})` : ''}`
+        : `Mesa ${mesa_numero}${etiqueta ? ` (${etiqueta})` : ''}`;
 
     const alPlatilloListo = ({ item, mesa_numero, etiqueta }) => {
       sonar('listo');

@@ -617,7 +617,17 @@ button {
   color: #fff;
 }
 
-/* --- Pantallas de arranque: rol e inicio de sesion --- */
+/* --- Pantallas de arranque: rol, inicio de sesion y acceso del encargado ---
+
+   Estas son las unicas pantallas que NO se usan con prisa: la de rol se toca
+   una vez cuando se configura la tablet, y la de "quien atiende" una vez por
+   turno. Por eso aqui si vale la pena que se vea como el negocio y no como una
+   herramienta: es la cara que da el sistema cuando alguien lo abre.
+
+   El resto de la app se queda clara y plana a proposito (sol, prisa, manos
+   grasosas). Aqui se invierte: fondo oscuro como el logo, que es negro, y el
+   fuego del logo como acento. Sin sol de por medio, porque estas pantallas se
+   ven de frente y no de reojo. */
 
 .pantalla-inicio {
   height: 100%;
@@ -625,30 +635,88 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 24px;
+  gap: 0;
+  padding: 32px 24px;
   text-align: center;
+  /* El carbon del logo, con el fuego insinuado detras: el resplandor naranja
+     sale de donde esta el logo y se apaga hacia las orillas. */
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 22%, rgb(232 73 31 / 0.22), transparent 70%),
+    radial-gradient(ellipse 90% 60% at 50% 100%, rgb(245 163 0 / 0.08), transparent 75%),
+    var(--carbon);
+  color: #fff;
+  overflow-y: auto;
+}
+
+/* El logo trae las esquinas en negro solido (no transparente), y sobre este
+   fondo oscuro se veian como un cuadro alrededor del circulo. Se recorta en
+   redondo para quedarnos solo con la moneda del logo.
+   El resplandor lo despega del fondo: negro sobre negro pierde el contorno. */
+.pantalla-inicio .logo-inicio {
+  width: min(180px, 42vw);
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 50%;
+  margin-bottom: 20px;
+  filter: drop-shadow(0 0 30px rgb(232 73 31 / 0.4));
+}
+
+.pantalla-inicio .logo-inicio.chico {
+  width: min(112px, 30vw);
+  margin-bottom: 14px;
 }
 
 .pantalla-inicio h1 {
-  font-size: 26px;
-  margin: 0 0 4px;
-  font-weight: 600;
+  font-size: clamp(24px, 5vw, 31px);
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+
+/* La linea de fuego bajo el titulo: el degradado del logo, de naranja a
+   amarillo de flama. Es el unico adorno de la pantalla. */
+.pantalla-inicio h1::after {
+  content: '';
+  display: block;
+  width: 64px;
+  height: 3px;
+  margin: 12px auto 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--marca), var(--flama));
 }
 
 .pantalla-inicio p {
-  color: var(--texto-tenue);
-  margin: 0 0 24px;
+  color: rgb(255 255 255 / 0.62);
+  margin: 14px 0 26px;
+  font-size: 16px;
+  max-width: 34ch;
 }
 
 .pantalla-inicio .opciones {
   display: grid;
   gap: 12px;
-  width: min(360px, 100%);
+  width: min(380px, 100%);
+}
+
+/* Los botones sobre el fondo oscuro no pueden ser los blancos de siempre: se
+   convierten en tarjetas translucidas con borde tenue. Se mantiene el tamaño de
+   toque grande, que eso no cambia por ser bonito. */
+.pantalla-inicio .boton {
+  background: rgb(255 255 255 / 0.07);
+  border: 1px solid rgb(255 255 255 / 0.16);
+  color: #fff;
+  border-radius: 12px;
+}
+
+.pantalla-inicio .boton:active {
+  background: rgb(255 255 255 / 0.14);
+  border-color: rgb(255 255 255 / 0.3);
 }
 
 .pantalla-inicio .opciones .boton {
-  min-height: 76px;
+  min-height: 78px;
   font-size: 18px;
 }
 
@@ -664,6 +732,190 @@ button {
 .rejilla-meseros .boton {
   min-height: 84px;
   font-size: 19px;
+}
+
+/* Los botones de rol dicen tambien para que sirve cada uno: la tablet se
+   configura una sola vez, casi siempre por alguien que no la va a usar, y
+   "Caja" a secas no basta para saber cual toca. */
+.opcion-rol {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 14px 20px;
+  text-align: left;
+  /* La barra de fuego aparece al tocar: confirma cual se eligio en el instante
+     entre el toque y el cambio de pantalla. */
+  position: relative;
+  overflow: hidden;
+}
+
+.opcion-rol::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--marca), var(--flama));
+  opacity: 0;
+}
+
+.opcion-rol:active::before {
+  opacity: 1;
+}
+
+.opcion-rol .nombre-rol {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.opcion-rol .descripcion-rol {
+  font-size: 14px;
+  font-weight: 400;
+  color: rgb(255 255 255 / 0.55);
+}
+
+/* El pie discreto: la misma linea que trae el logo. Ancla la pantalla y llena
+   el vacio de abajo sin pedir nada al que la mira. */
+.pantalla-inicio .desde {
+  margin-top: 28px;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.3);
+}
+
+/* Acceso del encargado. Angosto a proposito: son dos campos y un boton, y en
+   una tablet horizontal estirarlos de lado a lado los vuelve incomodos. */
+.acceso-encargado {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+.acceso-encargado .campo label {
+  color: rgb(255 255 255 / 0.62);
+}
+
+/* Los campos sobre el fondo oscuro: el blanco de siempre aqui deslumbra. */
+.acceso-encargado .campo input {
+  background: rgb(255 255 255 / 0.07);
+  border-color: rgb(255 255 255 / 0.2);
+  color: #fff;
+}
+
+.acceso-encargado .campo input:focus {
+  outline-color: var(--flama);
+  background: rgb(255 255 255 / 0.1);
+}
+
+.acceso-encargado .boton {
+  margin-top: 14px;
+  min-height: var(--toque);
+}
+
+/* El boton de entrar si va con el naranja de la marca, lleno: es la unica
+   accion de la pantalla y tiene que verse como tal. */
+.acceso-encargado .boton.primario {
+  background: var(--marca);
+  border-color: var(--marca);
+  color: #fff;
+}
+
+.acceso-encargado .boton.primario:active {
+  background: var(--acento);
+}
+
+.acceso-encargado .boton.primario:disabled {
+  background: rgb(255 255 255 / 0.07);
+  border-color: rgb(255 255 255 / 0.16);
+  color: rgb(255 255 255 / 0.4);
+  opacity: 1;
+}
+
+/* El error sobre oscuro: el rojo de la paleta no se lee, se aclara. */
+.pantalla-inicio .error-texto {
+  color: #ff9d8e;
+  background: rgb(163 42 31 / 0.25);
+  border: 1px solid rgb(255 157 142 / 0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+}
+
+/* El de "cambiar el uso de esta tablet" es una salida, no una accion: se deja
+   al fondo para que no compita con lo que se vino a hacer. */
+.pantalla-inicio .boton.chico {
+  background: none;
+  border-color: rgb(255 255 255 / 0.18);
+  color: rgb(255 255 255 / 0.62);
+}
+
+.pantalla-inicio .vacio {
+  color: rgb(255 255 255 / 0.55);
+}
+
+/* Pantallas bajitas (tablet acostada, ventana a medias): los cuatro roles
+   TIENEN que caber sin scroll. Si el ultimo queda cortado, quien configura la
+   tablet no sabe que existe: no se ve ni media rebanada que invite a deslizar.
+   Se encoge todo en cascada, empezando por lo que menos informa. */
+@media (max-height: 620px) {
+  .pantalla-inicio {
+    padding: 16px 24px;
+    justify-content: flex-start;
+  }
+
+  .pantalla-inicio .logo-inicio {
+    width: min(84px, 20vw);
+    margin-bottom: 8px;
+  }
+
+  .pantalla-inicio .logo-inicio.chico {
+    width: min(68px, 16vw);
+    margin-bottom: 6px;
+  }
+
+  .pantalla-inicio h1 {
+    font-size: 22px;
+  }
+
+  .pantalla-inicio h1::after {
+    margin-top: 8px;
+    width: 48px;
+  }
+
+  .pantalla-inicio p {
+    margin: 8px 0 14px;
+    font-size: 15px;
+  }
+
+  .pantalla-inicio .opciones {
+    gap: 8px;
+  }
+
+  .pantalla-inicio .opciones .boton {
+    min-height: 60px;
+    padding: 10px 18px;
+  }
+
+  .opcion-rol .nombre-rol {
+    font-size: 17px;
+  }
+
+  .opcion-rol .descripcion-rol {
+    font-size: 13px;
+  }
+
+  .rejilla-meseros .boton {
+    min-height: 68px;
+  }
+
+  .pantalla-inicio .desde {
+    display: none;
+  }
 }
 
 /* --- Formularios --- */
@@ -901,42 +1153,6 @@ button {
 }
 
 /* --- Marca --- */
-
-.logo-inicio {
-  width: 190px;
-  height: 190px;
-  border-radius: 50%;
-  object-fit: cover;
-  margin-bottom: 18px;
-}
-
-.logo-inicio.chico {
-  width: 120px;
-  height: 120px;
-  margin-bottom: 12px;
-}
-
-/* Los botones de rol dicen tambien para que sirve cada uno: la tablet se
-   configura una sola vez, casi siempre por alguien que no la va a usar, y
-   "Caja" a secas no basta para saber cual toca. */
-.opcion-rol {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  padding: 14px 20px;
-  text-align: left;
-}
-
-.opcion-rol .nombre-rol {
-  font-size: 19px;
-  font-weight: 700;
-}
-
-.opcion-rol .descripcion-rol {
-  font-size: 14px;
-  font-weight: 400;
-  color: var(--texto-tenue);
-}
 
 /* --- Navegacion principal (tablet del encargado) --- */
 
@@ -1218,4 +1434,106 @@ button {
 
 .boton.rojo:active {
   background: #8a231a;
+}
+
+/* Las carnes de la planchada / pellizcada. Dos columnas: son seis botones y en
+   una sola fila vertical la lista se sale de la pantalla en la tablet. */
+.rejilla-carnes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.rejilla-carnes .boton {
+  min-height: 64px;
+  font-size: 17px;
+}
+
+@media (max-width: 380px) {
+  .rejilla-carnes {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Cobro de cantidad libre. El monto se teclea grande: es el unico dato que de
+   verdad importa y hay que poder verificarlo de un vistazo antes de cobrar. */
+.cobro-libre {
+  max-width: 460px;
+}
+
+.entrada-monto {
+  font-size: 34px !important;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  min-height: 78px;
+}
+
+.cobro-libre .acuse {
+  background: var(--verde-tenue, #e8f5e9);
+  border: 1px solid var(--verde);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  color: var(--verde);
+}
+
+/* Historial del dia: hora, de quien fue y cuanto. Renglon tocable completo,
+   porque en la tablet apuntarle a un texto chico con prisa no funciona. */
+.fila-historial {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 12px;
+  background: var(--tarjeta, #fff);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  min-height: 64px;
+}
+
+.fila-historial:active {
+  background: var(--fondo);
+}
+
+.fila-historial .hora {
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-tenue);
+  font-size: 15px;
+  min-width: 46px;
+}
+
+.fila-historial .quien {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fila-historial .quien .nombre {
+  font-weight: 600;
+}
+
+.fila-historial .quien .detalle {
+  font-size: 14px;
+  color: var(--texto-tenue);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fila-historial .monto {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.fila-historial .monto.tenue {
+  color: var(--texto-tenue);
+  text-decoration: line-through;
+  font-weight: 500;
 }

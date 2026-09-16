@@ -41,10 +41,15 @@ CREATE INDEX IF NOT EXISTS idx_platillos_categoria ON platillos (categoria, orde
 
 -- Una mesa puede tener varias comandas abiertas al mismo tiempo:
 -- dos familias distintas sentadas juntas, cuentas separadas.
+--
+-- mesa_id es NULL en las ventas de mostrador: alguien que llega, pide para
+-- llevar y paga en la caja sin ocupar mesa. No es una mesa especial inventada
+-- para el caso (esa apareceria en la pantalla de meseros y en el corte como si
+-- fuera una mesa real); es la ausencia de mesa, que es justo lo que pasa.
 CREATE TABLE IF NOT EXISTS comandas (
   id              INTEGER PRIMARY KEY,
   client_id       TEXT    UNIQUE,
-  mesa_id         INTEGER NOT NULL REFERENCES mesas (id),
+  mesa_id         INTEGER REFERENCES mesas (id),
   etiqueta        TEXT,
   -- `mesera` es el nombre congelado al momento de abrir; `mesero_id` apunta al
   -- que inicio sesion. Se guardan los dos: el id sirve para reportes por
@@ -53,6 +58,14 @@ CREATE TABLE IF NOT EXISTS comandas (
   mesero_id       INTEGER REFERENCES meseros (id),
   estado          TEXT    NOT NULL DEFAULT 'abierta'
                   CHECK (estado IN ('abierta', 'cerrada', 'cancelada')),
+  -- Cobro de cantidad libre: la caja escribio un monto sin picar platillos
+  -- (un pedido por telefono, algo que no esta en el menu, una propina que el
+  -- cliente quiere en el ticket). No tiene comanda_items, asi que su
+  -- total_centavos NO se recalcula desde items: se fija al cobrar y se queda.
+  -- Se marca para poder separarlas en el corte y vigilar que no se abuse del
+  -- boton, que es dinero que entra sin decir de que fue.
+  venta_libre     INTEGER NOT NULL DEFAULT 0 CHECK (venta_libre IN (0, 1)),
+  concepto        TEXT,
   -- Cache denormalizado: se recalcula desde comanda_items dentro de la misma
   -- transaccion que modifica los items, nunca se edita por separado.
   total_centavos  INTEGER NOT NULL DEFAULT 0,

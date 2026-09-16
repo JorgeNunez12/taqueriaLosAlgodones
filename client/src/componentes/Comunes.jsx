@@ -1,6 +1,7 @@
 // Piezas que usan las tres pantallas.
 
 import { useEffect, useState } from 'react';
+import { CARNES } from '../carnes.js';
 
 /** Punto verde/rojo + cuantos envios esperan salir. */
 export function EstadoRed({ conectado, pendientes }) {
@@ -78,6 +79,36 @@ export function Modal({ titulo, children, alCerrar }) {
         {children}
       </div>
     </div>
+  );
+}
+
+/**
+ * Pregunta cual carne lleva una planchada o una pellizcada.
+ *
+ * Sale sola al tocar el platillo, antes de que caiga al carrito: preguntarlo
+ * despues significaria que la mesera puede mandar el pedido sin contestar, y
+ * cocina se quedaria otra vez sin saber que carne poner.
+ *
+ * Un solo toque agrega y cierra. No hay boton de "guardar" porque seria un
+ * segundo toque para la decision mas repetida del turno; para arrepentirse
+ * esta Cancelar, y la carne se puede corregir despues desde la nota.
+ */
+export function ElegirCarne({ nombre, alElegir, alCerrar }) {
+  return (
+    <Modal titulo={`${nombre} — ¿de qué carne?`} alCerrar={alCerrar}>
+      <div className="rejilla-carnes">
+        {CARNES.map((carne) => (
+          <button key={carne} className="boton" onClick={() => alElegir(carne)}>
+            {carne}
+          </button>
+        ))}
+      </div>
+      <div className="acciones">
+        <button className="boton" onClick={alCerrar}>
+          Cancelar
+        </button>
+      </div>
+    </Modal>
   );
 }
 
